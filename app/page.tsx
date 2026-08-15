@@ -20,7 +20,7 @@ export default function Home() {
   const [stage, setStage] = useState<Stage>("input");
   const [idea, setIdea] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [assetLocked, setAssetLocked] = useState(true);
+  const [fileRoles, setFileRoles] = useState<Record<string, "locked" | "reference">>({});
   const [analysis, setAnalysis] = useState<ProjectAnalysis | null>(null);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [creativePlan, setCreativePlan] = useState<CreativePlan | null>(null);
@@ -83,7 +83,11 @@ export default function Home() {
       const combined = [...current];
       for (const file of valid) {
         const alreadyAdded = combined.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified);
-        if (!alreadyAdded) combined.push(file);
+        if (!alreadyAdded) {
+          const role = combined.length === 0 ? "locked" : "reference";
+          combined.push(file);
+          setFileRoles((roles) => ({ ...roles, [`${file.name}:${file.size}:${file.lastModified}`]: role }));
+        }
       }
       return combined;
     });
@@ -114,7 +118,7 @@ export default function Home() {
     const form = new FormData();
     form.set("idea", idea.trim());
     form.set("title", projectTitle);
-    form.set("assetLocked", String(assetLocked));
+    form.set("assetRoles", JSON.stringify(files.map((file) => fileRoles[`${file.name}:${file.size}:${file.lastModified}`] ?? "reference")));
     files.forEach((file) => form.append("files", file));
     const response = await fetch("/api/projects", { method: "POST", body: form });
     const result = await response.json();
@@ -224,7 +228,7 @@ export default function Home() {
                   onDrop={handleFileDrop}
                 ><span className="upload-mark">↑</span><strong>{isDraggingFiles ? "Suelta las fotos aquí" : files.length ? `${files.length} archivo(s) seleccionado(s)` : "Arrastra tus archivos aquí"}</strong><span>o haz clic para elegirlos · PNG, JPG o WEBP</span><input accept="image/png,image/jpeg,image/webp" id="assets" multiple onChange={handleFiles} type="file" /></label>
               </div>
-              {files.length > 0 && <div className="asset-card"><div className="file-stack">{files.length}</div><div className="asset-copy"><strong>{files[0].name}</strong><span>{files.length > 1 ? `y ${files.length - 1} archivo(s) más` : "Producto real"}</span></div><label className="lock-toggle"><input checked={assetLocked} onChange={(event) => setAssetLocked(event.target.checked)} type="checkbox" /><span className="toggle-track"><span /></span>No modificar</label></div>}
+              {files.length > 0 && <div className="selected-assets">{files.map((file, index) => { const key = `${file.name}:${file.size}:${file.lastModified}`; const role = fileRoles[key] ?? (index === 0 ? "locked" : "reference"); return <div className="asset-card" key={key}><div className="file-stack">{index + 1}</div><div className="asset-copy"><strong>{file.name}</strong><span>{role === "locked" ? "Producto real · conservar" : "Referencia visual · inspirar"}</span></div><div className="asset-role-buttons"><button className={role === "locked" ? "active" : ""} onClick={() => setFileRoles((current) => ({ ...current, [key]: "locked" }))} type="button">Producto real</button><button className={role === "reference" ? "active" : ""} onClick={() => setFileRoles((current) => ({ ...current, [key]: "reference" }))} type="button">Referencia</button></div></div>; })}</div>}
               {notice && <p className="form-notice" role="alert">{notice}</p>}
               <div className="panel-actions"><p><span className="spark">✦</span> El análisis no generará ninguna imagen.</p><button className="primary-button" disabled={busy} onClick={analyze} type="button">{busy ? "Guardando…" : "Analizar proyecto"} <span>→</span></button></div>
             </section>

@@ -35,6 +35,53 @@ const ANALYSIS_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    concept: { type: "string" },
+    rationale: { type: "string" },
+    objective: { type: "string" },
+    audience: { type: "string" },
+    format: { type: "string" },
+    visual_composition: { type: "array", minItems: 3, maxItems: 7, items: { type: "string" } },
+    hero_asset: { type: "string" },
+    scene: { type: "string" },
+    headline: { type: "string" },
+    subheadline: { type: "string" },
+    cta: { type: "string" },
+    references_used: { type: "array", items: { type: "string" } },
+    ai_generated_elements: { type: "array", items: { type: "string" } },
+    preserved_real_elements: { type: "array", items: { type: "string" } },
+    restrictions: { type: "array", items: { type: "string" } },
+    qa_checklist: { type: "array", minItems: 3, maxItems: 10, items: { type: "string" } },
+  },
+  required: ["concept", "rationale", "objective", "audience", "format", "visual_composition", "hero_asset", "scene", "headline", "subheadline", "cta", "references_used", "ai_generated_elements", "preserved_real_elements", "restrictions", "qa_checklist"],
+  additionalProperties: false,
+} as const;
+
+async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown }) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
+  const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
+  const system = `Eres el Director Creativo de Printoria 3D Studio. Convierte análisis y respuestas aprobadas en un plan ejecutable para un anuncio de Instagram/Facebook Feed 4:5, 1080 × 1350. No generes imagen todavía. No inventes precios, descuentos, materiales, compatibilidad, tiempos ni funciones. El producto real debe ser protagonista. Todo LOCKED ASSET se preserva sin regenerar, reinterpretar, cambiar texto, nombres, cantidades, color, forma o detalles. La IA sólo puede crear fondo, iluminación, ambiente y elementos decorativos que no alteren el producto. El copy debe ser español mexicano, claro, comercial, corto y con un solo CTA. Usa identidad Printoria: verde #96D629, negro #0B0B0B, carbón #202428, blanco #E1E0E0 y gris #555452. Devuelve un único plan, no alternativas.`;
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "system", content: system }, { role: "user", content: `IDEA ORIGINAL:\n${input.idea}\n\nANÁLISIS VERIFICADO:\n${JSON.stringify(input.analysis)}\n\nRESPUESTAS DEL USUARIO:\n${JSON.stringify(input.answers)}\n\nConstruye el brief y plan creativo final previo a generación.` }],
+      response_format: { type: "json_schema", json_schema: { name: "printoria_creative_plan", strict: true, schema: PLAN_SCHEMA } },
+      provider: { require_parameters: true },
+      temperature: 0.35,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error?.message ?? "OpenRouter no pudo crear el plan.");
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content !== "string") throw new Error("OpenRouter devolvió un plan vacío.");
+  return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
+}
+
 async function analyzeWithOpenRouter(idea: string, files: File[]) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
@@ -112,8 +159,16 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     if (!body.projectId) return NextResponse.json({ error: "Falta el proyecto." }, { status: 400 });
     if (body.action === "plan") {
-      const { error } = await supabase.from("creative_projects").update({ form_answers: body.answers, objective: body.goal, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
+      const { data: project, error: projectError } = await supabase.from("creative_projects").select("idea").eq("id", body.projectId).single();
+      if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
+      const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers });
+      const { error } = await supabase.from("creative_projects").update({ form_answers: body.answers, objective: ai.plan.objective, creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
+      const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
+      if (brief.error) throw brief.error;
+      await supabase.from("creative_generations").insert({ project_id: body.projectId, kind: "brief", provider: "openrouter", model: ai.model, status: "completed", output_data: ai.plan, input_tokens: ai.usage.prompt_tokens ?? 0, output_tokens: ai.usage.completion_tokens ?? 0, cost_usd: ai.usage.cost ?? 0, completed_at: new Date().toISOString() });
+      return NextResponse.json({ ok: true, plan: ai.plan });
     } else if (body.action === "approve") {
       const { error } = await supabase.from("creative_projects").update({ creative_plan: body.plan, status: "approved", approved_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;

@@ -114,6 +114,16 @@ function adminClient() {
   return createClient("https://sjstuvixonakpjezkmpk.supabase.co", key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+export async function GET() {
+  try {
+    const { data, error } = await adminClient().from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
+    if (error) throw error;
+    return NextResponse.json({ projects: data ?? [] });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Error al cargar proyectos." }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = adminClient();

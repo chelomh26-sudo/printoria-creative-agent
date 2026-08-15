@@ -149,7 +149,7 @@ export default function Home() {
     <main className="auth-screen">
       <form className="auth-card" onSubmit={authenticate}>
         <div className="brand-lockup auth-brand"><div className="brand-cube" aria-hidden="true"><span /></div><div><p className="brand-name">Printoria</p><p className="brand-product">Creative Agent</p></div></div>
-        <span className="section-kicker">ACCESO PRIVADO</span>
+        <span className="section-kicker">ACCESO PRIVADO · V0.2.1</span>
         <h1>{authMode === "login" ? "Entra a tu estudio creativo" : "Crea tu acceso"}</h1>
         <p>Tus proyectos, fotografías y costos quedarán guardados de forma privada.</p>
         <label className="field-label" htmlFor="email">Correo</label>

@@ -139,7 +139,7 @@ async function generateImageWithOpenRouter(prompt: string, references: string[])
     body: JSON.stringify({
       model: IMAGE_MODEL,
       prompt,
-      aspect_ratio: "4:5",
+      aspect_ratio: "3:4",
       quality: "high",
       n: 1,
       input_references: references.map((url) => ({ type: "image_url", image_url: { url } })),
@@ -268,9 +268,9 @@ export async function PATCH(request: Request) {
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });
         if (upload.error) throw upload.error;
-        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "4:5", quality: "high" } });
+        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "3:4", target_aspect_ratio: "4:5", quality: "high" } });
         if (assetInsert.error) throw assetInsert.error;
-        const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "4:5", quality: "high" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
+        const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "3:4", target_aspect_ratio: "4:5", quality: "high" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
         if (completed.error) throw completed.error;
         const { data: costs } = await supabase.from("creative_generations").select("cost_usd").eq("project_id", body.projectId).eq("status", "completed");
         const totalCost = (costs ?? []).reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);

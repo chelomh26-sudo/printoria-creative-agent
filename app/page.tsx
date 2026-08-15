@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- private Supabase signed URLs expire and should not be optimized */
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Stage = "input" | "questions" | "plan" | "approved";
@@ -29,6 +29,7 @@ export default function Home() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [imageResult, setImageResult] = useState<ImageResult | null>(null);
   const [correctionRequest, setCorrectionRequest] = useState("");
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
@@ -57,7 +58,31 @@ export default function Home() {
   }, []);
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    setFiles(Array.from(event.target.files ?? []));
+    selectImageFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+  }
+
+  function selectImageFiles(incoming: File[]) {
+    const valid = incoming.filter((file) => ["image/png", "image/jpeg", "image/webp"].includes(file.type));
+    if (!valid.length) {
+      setNotice("Usa imágenes PNG, JPG, JPEG o WEBP.");
+      return;
+    }
+    setFiles((current) => {
+      const combined = [...current];
+      for (const file of valid) {
+        const alreadyAdded = combined.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified);
+        if (!alreadyAdded) combined.push(file);
+      }
+      return combined;
+    });
+    setNotice(valid.length < incoming.length ? "Se omitieron archivos que no eran imágenes compatibles." : "");
+  }
+
+  function handleFileDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    selectImageFiles(Array.from(event.dataTransfer.files));
   }
 
   function answerQuestion(id: string, value: string, multiple = false) {
@@ -179,7 +204,14 @@ export default function Home() {
               <div className="text-meta"><span>Escribe con tus propias palabras</span><span>{idea.length} caracteres</span></div>
               <div className="asset-section">
                 <div><label className="field-label" htmlFor="assets">Fotografías y referencias</label><p className="field-help">Producto real, pedido real, logo, mascota o referencia visual.</p></div>
-                <label className="dropzone" htmlFor="assets"><span className="upload-mark">↑</span><strong>{files.length ? `${files.length} archivo(s) seleccionado(s)` : "Arrastra tus archivos aquí"}</strong><span>o haz clic para elegirlos · PNG, JPG o WEBP</span><input accept="image/png,image/jpeg,image/webp" id="assets" multiple onChange={handleFiles} type="file" /></label>
+                <label
+                  className={`dropzone ${isDraggingFiles ? "dragging" : ""}`}
+                  htmlFor="assets"
+                  onDragEnter={(event) => { event.preventDefault(); setIsDraggingFiles(true); }}
+                  onDragLeave={(event) => { event.preventDefault(); if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFiles(false); }}
+                  onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+                  onDrop={handleFileDrop}
+                ><span className="upload-mark">↑</span><strong>{isDraggingFiles ? "Suelta las fotos aquí" : files.length ? `${files.length} archivo(s) seleccionado(s)` : "Arrastra tus archivos aquí"}</strong><span>o haz clic para elegirlos · PNG, JPG o WEBP</span><input accept="image/png,image/jpeg,image/webp" id="assets" multiple onChange={handleFiles} type="file" /></label>
               </div>
               {files.length > 0 && <div className="asset-card"><div className="file-stack">{files.length}</div><div className="asset-copy"><strong>{files[0].name}</strong><span>{files.length > 1 ? `y ${files.length - 1} archivo(s) más` : "Producto real"}</span></div><label className="lock-toggle"><input checked={assetLocked} onChange={(event) => setAssetLocked(event.target.checked)} type="checkbox" /><span className="toggle-track"><span /></span>No modificar</label></div>}
               {notice && <p className="form-notice" role="alert">{notice}</p>}

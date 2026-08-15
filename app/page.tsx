@@ -41,13 +41,16 @@ export default function Home() {
       const project = result.project;
       setProjectId(project.id);
       setIdea(project.idea ?? "");
-      setAnswers(project.form_answers ?? {});
-      setCreativePlan(project.creative_plan && Object.keys(project.creative_plan).length ? project.creative_plan : null);
+      const savedAnswers = project.form_answers && typeof project.form_answers === "object" ? project.form_answers : {};
+      const savedPlan = project.creative_plan && typeof project.creative_plan === "object" && Object.keys(project.creative_plan).length ? project.creative_plan : null;
+      setAnswers(savedAnswers);
+      setCreativePlan(savedPlan);
       setAnalysis(result.analysis ?? null);
       if (result.imageUrl) setImageResult({ url: result.imageUrl, model: result.imageModel ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) });
       if (result.imageUrl) setStage("approved");
-      else if (project.creative_plan && Object.keys(project.creative_plan).length) setStage("plan");
-      else setStage("questions");
+      else if (savedPlan) setStage("plan");
+      else if (result.analysis?.questions) setStage("questions");
+      else setStage("input");
       setNotice("Proyecto existente cargado. Puedes modificarlo y continuar.");
     }).catch((reason) => setNotice(reason.message));
   }, []);
@@ -176,7 +179,7 @@ export default function Home() {
             <section className="panel">
               <div className="analysis-banner"><div className="analysis-icon">✓</div><div><strong>Análisis real completado</strong><p>{analysis?.product_summary}</p></div><span className="confidence">OpenRouter</span></div>
               <div className="panel-heading compact"><span className="section-kicker">FASE 2</span><h2>Sólo necesito confirmar esto</h2><p>Las preguntas cambian según el proyecto. No volveré a pedir información que ya proporcionaste.</p></div>
-              {analysis?.questions.map((question) => <DynamicQuestionField answer={answers[question.id]} key={question.id} onAnswer={answerQuestion} question={question} />)}
+              {(analysis?.questions ?? []).map((question) => <DynamicQuestionField answer={answers[question.id]} key={question.id} onAnswer={answerQuestion} question={question} />)}
               <div className="panel-actions"><button className="text-button" onClick={() => setStage("input")} type="button">← Volver</button><button className="primary-button" disabled={busy} onClick={createPlan} type="button">{busy ? "Guardando…" : "Crear plan creativo"} <span>→</span></button></div>
             </section>
           )}
@@ -186,7 +189,7 @@ export default function Home() {
               <div className="panel-heading"><span className="section-kicker">ANTES DE GENERAR</span><h2>Esto es lo que voy a crear</h2><p>Revisa el concepto. No se gastará en generación hasta que lo apruebes.</p></div>
               <div className="plan-layout">
                 <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit"><div className="product-placeholder"><span>LOCKED ASSET</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
-                <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{creativePlan?.visual_composition.map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{creativePlan?.ai_generated_elements.map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{creativePlan?.preserved_real_elements.join(" · ")}</p></div></div></div>
+                <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{(creativePlan?.visual_composition ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{(creativePlan?.ai_generated_elements ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{(creativePlan?.preserved_real_elements ?? []).join(" · ")}</p></div></div></div>
               </div>
               {notice && <p className="form-notice" role="alert">{notice}</p>}
               <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Generando imagen…" : "Aprobar y generar"} <span>✓</span></button></div>

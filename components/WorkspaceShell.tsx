@@ -1,0 +1,6 @@
+import Link from "next/link";
+import { ReactNode } from "react";
+
+export function WorkspaceShell({ active, title, subtitle, children }: { active: "new" | "projects" | "library"; title: string; subtitle: string; children: ReactNode }) {
+  return <main className="app-shell"><aside className="sidebar"><div className="brand-lockup"><div className="brand-cube" aria-hidden="true"><span /></div><div><p className="brand-name">Printoria</p><p className="brand-product">Creative Agent</p></div></div><nav className="side-nav"><Link className={`nav-item ${active === "new" ? "active" : ""}`} href="/"><span>✦</span> Nuevo creativo</Link><Link className={`nav-item ${active === "projects" ? "active" : ""}`} href="/projects"><span>▦</span> Mis proyectos</Link><Link className={`nav-item ${active === "library" ? "active" : ""}`} href="/library"><span>◇</span> Biblioteca de marca</Link></nav><div className="sidebar-status"><div className="status-row"><span>Workspace privado</span><span className="status-pill">Activo</span></div><p>Información protegida y guardada en Supabase.</p></div></aside><section className="workspace"><header className="topbar"><div><p className="eyebrow">PRINTORIA CREATIVE AGENT</p><h1>{title}</h1></div></header><div className="content-wrap"><div className="page-intro"><h2>{title}</h2><p>{subtitle}</p></div>{children}</div></section></main>;
+}

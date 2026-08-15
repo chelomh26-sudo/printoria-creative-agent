@@ -3,6 +3,8 @@
 import { ChangeEvent, useMemo, useState } from "react";
 
 type Stage = "input" | "questions" | "plan" | "approved";
+type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
+type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
 const steps = [
   { id: "input", label: "Entrada" },
   { id: "questions", label: "Preguntas" },
@@ -15,21 +17,25 @@ export default function Home() {
   const [idea, setIdea] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [assetLocked, setAssetLocked] = useState(true);
-  const [mechanism, setMechanism] = useState("manual");
-  const [goal, setGoal] = useState("orders");
-  const [personalization, setPersonalization] = useState<string[]>(["name", "color"]);
+  const [analysis, setAnalysis] = useState<ProjectAnalysis | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
+  const goal = analysis?.objective_guess ?? "orders";
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []));
   }
 
-  function togglePersonalization(value: string) {
-    setPersonalization((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  function answerQuestion(id: string, value: string, multiple = false) {
+    setAnswers((current) => {
+      if (!multiple) return { ...current, [id]: value };
+      const selected = Array.isArray(current[id]) ? current[id] as string[] : [];
+      return { ...current, [id]: selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value] };
+    });
   }
 
   async function analyze() {
@@ -46,20 +52,28 @@ export default function Home() {
     files.forEach((file) => form.append("files", file));
     const response = await fetch("/api/projects", { method: "POST", body: form });
     const result = await response.json();
-    if (!response.ok || !result.id) {
+    if (!response.ok || !result.id || !result.analysis) {
       setBusy(false);
       setNotice(result.error ?? "No se pudo guardar el proyecto.");
       return;
     }
     setProjectId(result.id);
+    setAnalysis(result.analysis);
+    const initialAnswers: Record<string, string | string[]> = {};
+    for (const question of result.analysis.questions as DynamicQuestion[]) initialAnswers[question.id] = question.type === "multiple_choice" ? [] : "";
+    setAnswers(initialAnswers);
     setBusy(false);
     setStage("questions");
   }
 
   async function createPlan() {
     if (!projectId) return;
+    const missing = analysis?.questions.some((question) => question.required && (!answers[question.id] || (Array.isArray(answers[question.id]) && answers[question.id].length === 0)));
+    if (missing) {
+      setNotice("Responde las preguntas obligatorias antes de continuar.");
+      return;
+    }
     setBusy(true);
-    const answers = { mechanism, personalization, goal };
     const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "plan", projectId, answers, goal }) });
     const result = await response.json();
     setBusy(false);
@@ -129,11 +143,9 @@ export default function Home() {
 
           {stage === "questions" && (
             <section className="panel">
-              <div className="analysis-banner"><div className="analysis-icon">✓</div><div><strong>Tu producto ya fue analizado</strong><p>Detecté un guardacables personalizable. La fotografía se conservará como asset bloqueado.</p></div><span className="confidence">Confianza alta</span></div>
+              <div className="analysis-banner"><div className="analysis-icon">✓</div><div><strong>Análisis real completado</strong><p>{analysis?.product_summary}</p></div><span className="confidence">OpenRouter</span></div>
               <div className="panel-heading compact"><span className="section-kicker">FASE 2</span><h2>Sólo necesito confirmar esto</h2><p>Las preguntas cambian según el proyecto. No volveré a pedir información que ya proporcionaste.</p></div>
-              <QuestionChoice title="¿Cómo funciona realmente para guardar el cable?" help="Esto define la demostración visual y evita anunciar un mecanismo inexistente." value={mechanism} onChange={setMechanism} options={[["manual","Se enrolla manualmente","La persona acomoda el cable en el centro."],["automatic","Es retráctil automático","El mecanismo recoge el cable por sí mismo."],["other","Usa otro mecanismo","Puedes explicarlo en el siguiente paso."]]} />
-              <fieldset className="question-block"><legend>¿Qué puede personalizar el cliente?</legend><p>Puedes elegir más de una opción.</p><div className="choice-grid two">{[["name","Iniciales o nombre"],["color","Color del producto"],["none","No es personalizable"],["other","Otra opción"]].map(([value,label]) => <label className={`check-card ${personalization.includes(value) ? "selected" : ""}`} key={value}><input checked={personalization.includes(value)} onChange={() => togglePersonalization(value)} type="checkbox" /><span className="check-box">✓</span><strong>{label}</strong></label>)}</div></fieldset>
-              <QuestionChoice title="¿Qué quieres conseguir con esta pieza?" help="El objetivo cambia el mensaje, la explicación y el CTA." value={goal} onChange={setGoal} options={[["orders","Conseguir pedidos","CTA a WhatsApp"],["showcase","Mostrar el producto","Publicación orgánica"],["explain","Explicar cómo funciona","Contenido demostrativo"]]} />
+              {analysis?.questions.map((question) => <DynamicQuestionField answer={answers[question.id]} key={question.id} onAnswer={answerQuestion} question={question} />)}
               <div className="panel-actions"><button className="text-button" onClick={() => setStage("input")} type="button">← Volver</button><button className="primary-button" disabled={busy} onClick={createPlan} type="button">{busy ? "Guardando…" : "Crear plan creativo"} <span>→</span></button></div>
             </section>
           )}
@@ -143,7 +155,7 @@ export default function Home() {
               <div className="panel-heading"><span className="section-kicker">ANTES DE GENERAR</span><h2>Esto es lo que voy a crear</h2><p>Revisa el concepto. No se gastará en generación hasta que lo apruebes.</p></div>
               <div className="plan-layout">
                 <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>CERO CABLES<br/><em>ENREDADOS</em></strong><span>Orden compacto y personalizado.</span></div><div className="product-orbit"><div className="product-placeholder"><span>FOTO REAL</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">COTIZA EL TUYO</div><div className="preview-signature">Printoria <span>3D</span></div></div>
-                <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>Del enredo al orden</h3><p>Una demostración clara del problema y la solución, con el guardacables real como protagonista.</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{goal === "orders" ? "Conseguir pedidos" : goal === "showcase" ? "Mostrar el producto" : "Explicar su uso"}</strong></article><article><span className="detail-label">FORMATO</span><strong>Feed 4:5 · 1080 × 1350</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul><li>Producto real grande y reconocible.</li><li>Cable suelto como tensión visual secundaria.</li><li>Fondo carbón con glow verde Printoria.</li><li>Headline, CTA y logo colocados por composición.</li></ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Fotografía protegida</strong><p>Forma, color, letras, cable y conectores permanecerán intactos.</p></div></div></div>
+                <div className="plan-details"><article><span className="detail-label">PRODUCTO ANALIZADO</span><h3>{analysis?.product_summary ?? "Proyecto Printoria"}</h3><p>{analysis?.primary_benefit ?? "El concepto final se construirá con tus respuestas."}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO INICIAL</span><strong>{analysis?.objective_guess ?? "Por confirmar"}</strong></article><article><span className="detail-label">FORMATO</span><strong>Feed 4:5 · 1080 × 1350</strong></article></div><article><span className="detail-label">HECHOS VERIFICADOS</span><ul>{analysis?.verified_facts.slice(0,4).map((fact) => <li key={fact}>{fact}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Assets protegidos</strong><p>{analysis?.preservation_rules[0] ?? "Las fotografías reales no serán reinterpretadas."}</p></div></div></div>
               </div>
               <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Guardando…" : "Aprobar plan"} <span>✓</span></button></div>
             </section>
@@ -158,6 +170,9 @@ export default function Home() {
   );
 }
 
-function QuestionChoice({ title, help, value, onChange, options }: { title: string; help: string; value: string; onChange: (value: string) => void; options: string[][] }) {
-  return <fieldset className="question-block"><legend>{title}</legend><p>{help}</p><div className="choice-grid three">{options.map(([option,label,description]) => <label className={`choice-card ${value === option ? "selected" : ""}`} key={option}><input checked={value === option} name={title} onChange={() => onChange(option)} type="radio"/><span className="radio-dot"/><strong>{label}</strong><small>{description}</small></label>)}</div></fieldset>;
+function DynamicQuestionField({ question, answer, onAnswer }: { question: DynamicQuestion; answer: string | string[] | undefined; onAnswer: (id: string, value: string, multiple?: boolean) => void }) {
+  if (question.type === "free_text") return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><textarea className="dynamic-answer" onChange={(event) => onAnswer(question.id, event.target.value)} placeholder={question.placeholder ?? "Escribe tu respuesta"} value={typeof answer === "string" ? answer : ""} /></fieldset>;
+  const multiple = question.type === "multiple_choice";
+  const selected = Array.isArray(answer) ? answer : [];
+  return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><div className="choice-grid three">{question.options.map((option) => { const active = multiple ? selected.includes(option) : answer === option; return <label className={`${multiple ? "check-card" : "choice-card"} ${active ? "selected" : ""}`} key={option}><input checked={active} name={multiple ? undefined : question.id} onChange={() => onAnswer(question.id, option, multiple)} type={multiple ? "checkbox" : "radio"}/>{multiple ? <span className="check-box">✓</span> : <span className="radio-dot"/>}<strong>{option}</strong></label>; })}</div></fieldset>;
 }

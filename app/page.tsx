@@ -28,6 +28,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [imageResult, setImageResult] = useState<ImageResult | null>(null);
+  const [correctionRequest, setCorrectionRequest] = useState("");
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
@@ -126,6 +127,17 @@ export default function Home() {
     }
   }
 
+  async function revisePlan() {
+    if (!projectId || !creativePlan) return;
+    if (correctionRequest.trim().length < 3) { setNotice("Escribe qué quieres cambiar del plan."); return; }
+    setBusy(true); setNotice("");
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "revise_plan", projectId, plan: creativePlan, correction: correctionRequest.trim() }) });
+    const result = await response.json();
+    setBusy(false);
+    if (!response.ok || !result.plan) setNotice(result.error ?? "No se pudo corregir el plan.");
+    else { setCreativePlan(result.plan); setCorrectionRequest(""); setNotice("Plan corregido. Revísalo otra vez antes de aprobar."); }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -191,8 +203,9 @@ export default function Home() {
                 <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit"><div className="product-placeholder"><span>LOCKED ASSET</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
                 <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{(creativePlan?.visual_composition ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{(creativePlan?.ai_generated_elements ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{(creativePlan?.preserved_real_elements ?? []).join(" · ")}</p></div></div></div>
               </div>
+              <div className="plan-correction"><label className="field-label" htmlFor="plan-correction">¿Qué quieres cambiar antes de aprobar?</label><p>Escribe la corrección con tus palabras. La IA modificará el plan, pero todavía no generará ninguna imagen.</p><textarea id="plan-correction" onChange={(event) => setCorrectionRequest(event.target.value)} placeholder="Ejemplo: Quiero el producto más grande, menos texto y el logo arriba a la derecha. Conserva todo lo demás." value={correctionRequest}/><button className="secondary-button" disabled={busy || correctionRequest.trim().length < 3} onClick={revisePlan} type="button">{busy ? "Corrigiendo plan…" : "Aplicar corrección al plan"}</button></div>
               {notice && <p className="form-notice" role="alert">{notice}</p>}
-              <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Generando imagen…" : "Aprobar y generar"} <span>✓</span></button></div>
+              <div className="panel-actions approval-actions"><button className="text-button" onClick={() => setStage("questions")} type="button">Cambiar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Generando imagen…" : "Aprobar plan y generar"} <span>✓</span></button></div>
             </section>
           )}
 
@@ -211,5 +224,7 @@ function DynamicQuestionField({ question, answer, onAnswer }: { question: Dynami
   if (question.type === "free_text") return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><textarea className="dynamic-answer" onChange={(event) => onAnswer(question.id, event.target.value)} placeholder={question.placeholder ?? "Escribe tu respuesta"} value={typeof answer === "string" ? answer : ""} /></fieldset>;
   const multiple = question.type === "multiple_choice";
   const selected = Array.isArray(answer) ? answer : [];
-  return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><div className="choice-grid three">{question.options.map((option) => { const active = multiple ? selected.includes(option) : answer === option; return <label className={`${multiple ? "check-card" : "choice-card"} ${active ? "selected" : ""}`} key={option}><input checked={active} name={multiple ? undefined : question.id} onChange={() => onAnswer(question.id, option, multiple)} type={multiple ? "checkbox" : "radio"}/>{multiple ? <span className="check-box">✓</span> : <span className="radio-dot"/>}<strong>{option}</strong></label>; })}</div></fieldset>;
+  const otherOption = question.options.find((option) => option.toLowerCase().startsWith("otro"));
+  const otherActive = Boolean(otherOption && (multiple ? selected.includes(otherOption) : answer === otherOption));
+  return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><div className="choice-grid three">{question.options.map((option) => { const active = multiple ? selected.includes(option) : answer === option; return <label className={`${multiple ? "check-card" : "choice-card"} ${active ? "selected" : ""}`} key={option}><input checked={active} name={multiple ? undefined : question.id} onChange={() => onAnswer(question.id, option, multiple)} type={multiple ? "checkbox" : "radio"}/>{multiple ? <span className="check-box">✓</span> : <span className="radio-dot"/>}<strong>{option}</strong></label>; })}</div>{otherActive && <textarea className="other-answer" onChange={(event) => onAnswer(`${question.id}__other`, event.target.value)} placeholder="Especifica tu opción…" />}</fieldset>;
 }

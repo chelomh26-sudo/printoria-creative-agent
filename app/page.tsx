@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- private Supabase signed URLs expire and should not be optimized */
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Stage = "input" | "questions" | "plan" | "approved";
@@ -31,6 +31,26 @@ export default function Home() {
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
+
+  useEffect(() => {
+    const existingId = new URLSearchParams(window.location.search).get("project");
+    if (!existingId) return;
+    fetch(`/api/projects?id=${encodeURIComponent(existingId)}`).then(async (response) => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo abrir el proyecto.");
+      const project = result.project;
+      setProjectId(project.id);
+      setIdea(project.idea ?? "");
+      setAnswers(project.form_answers ?? {});
+      setCreativePlan(project.creative_plan && Object.keys(project.creative_plan).length ? project.creative_plan : null);
+      setAnalysis(result.analysis ?? null);
+      if (result.imageUrl) setImageResult({ url: result.imageUrl, model: result.imageModel ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) });
+      if (result.imageUrl) setStage("approved");
+      else if (project.creative_plan && Object.keys(project.creative_plan).length) setStage("plan");
+      else setStage("questions");
+      setNotice("Proyecto existente cargado. Puedes modificarlo y continuar.");
+    }).catch((reason) => setNotice(reason.message));
+  }, []);
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []));
@@ -174,13 +194,15 @@ export default function Home() {
           )}
 
           {stage === "approved" && (
-            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu primera imagen está lista</h2><p>Seedream creó este borrador 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>Imagen: ${imageResult.imageCostUsd.toFixed(4)} USD · Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><button className="primary-button" onClick={() => setStage("input")} type="button">Crear otro proyecto</button></section>
+            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu primera imagen está lista</h2><p>Seedream creó este borrador 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>
     </main>
   );
 }
+
+const IMAGE_MODEL_LABEL = "bytedance-seed/seedream-4.5";
 
 function DynamicQuestionField({ question, answer, onAnswer }: { question: DynamicQuestion; answer: string | string[] | undefined; onAnswer: (id: string, value: string, multiple?: boolean) => void }) {
   if (question.type === "free_text") return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><textarea className="dynamic-answer" onChange={(event) => onAnswer(question.id, event.target.value)} placeholder={question.placeholder ?? "Escribe tu respuesta"} value={typeof answer === "string" ? answer : ""} /></fieldset>;

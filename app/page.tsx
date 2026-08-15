@@ -108,8 +108,8 @@ export default function Home() {
           <button className="nav-item" type="button"><span>◇</span> Biblioteca de marca</button>
         </nav>
         <div className="sidebar-status">
-          <div className="status-row"><span>Modo de prueba</span><span className="status-pill">Activo</span></div>
-          <p>Las APIs y Supabase se conectarán en el siguiente checkpoint.</p>
+          <div className="status-row"><span>Plan real · v0.3</span><span className="status-pill">Activo</span></div>
+          <p>OpenRouter y Supabase conectados. La generación de imagen será el siguiente checkpoint.</p>
         </div>
       </aside>
 

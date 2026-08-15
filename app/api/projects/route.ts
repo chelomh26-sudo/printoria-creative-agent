@@ -163,9 +163,23 @@ function adminClient() {
   return createClient("https://sjstuvixonakpjezkmpk.supabase.co", key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data, error } = await adminClient().from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
+    const supabase = adminClient();
+    const projectId = new URL(request.url).searchParams.get("id");
+    if (projectId) {
+      const { data: project, error } = await supabase.from("creative_projects").select("id,title,idea,status,objective,form_answers,creative_plan,total_cost_usd,cost_limit_usd,created_at,updated_at").eq("id", projectId).single();
+      if (error || !project) throw error ?? new Error("No se encontró el proyecto.");
+      const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", projectId).eq("kind", "analysis").eq("status", "completed").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: generatedAsset } = await supabase.from("creative_assets").select("storage_path,metadata").eq("project_id", projectId).eq("asset_role", "generated").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      let imageUrl: string | null = null;
+      if (generatedAsset?.storage_path) {
+        const signed = await supabase.storage.from("creative-assets").createSignedUrl(generatedAsset.storage_path, 3600);
+        imageUrl = signed.data?.signedUrl ?? null;
+      }
+      return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, imageModel: generatedAsset?.metadata?.model ?? null });
+    }
+    const { data, error } = await supabase.from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
     if (error) throw error;
     return NextResponse.json({ projects: data ?? [] });
   } catch (error) {

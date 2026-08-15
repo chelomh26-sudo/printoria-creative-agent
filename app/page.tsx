@@ -5,6 +5,7 @@ import { ChangeEvent, useMemo, useState } from "react";
 type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
 type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
+type CreativePlan = { concept: string; rationale: string; objective: string; audience: string; format: string; visual_composition: string[]; hero_asset: string; scene: string; headline: string; subheadline: string; cta: string; references_used: string[]; ai_generated_elements: string[]; preserved_real_elements: string[]; restrictions: string[]; qa_checklist: string[] };
 const steps = [
   { id: "input", label: "Entrada" },
   { id: "questions", label: "Preguntas" },
@@ -19,6 +20,7 @@ export default function Home() {
   const [assetLocked, setAssetLocked] = useState(true);
   const [analysis, setAnalysis] = useState<ProjectAnalysis | null>(null);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [creativePlan, setCreativePlan] = useState<CreativePlan | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -77,14 +79,15 @@ export default function Home() {
     const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "plan", projectId, answers, goal }) });
     const result = await response.json();
     setBusy(false);
-    if (!response.ok) setNotice(result.error ?? "No se pudo guardar el plan.");
-    else setStage("plan");
+    if (!response.ok || !result.plan) setNotice(result.error ?? "No se pudo crear el plan.");
+    else { setCreativePlan(result.plan); setNotice(""); setStage("plan"); }
   }
 
   async function approvePlan() {
     if (!projectId) return;
     setBusy(true);
-    const plan = { concept: "Del enredo al orden", format: "1080x1350", asset_preservation: assetLocked };
+    if (!creativePlan) return;
+    const plan = creativePlan;
     const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve", projectId, plan }) });
     const result = await response.json();
     setBusy(false);
@@ -154,8 +157,8 @@ export default function Home() {
             <section className="panel">
               <div className="panel-heading"><span className="section-kicker">ANTES DE GENERAR</span><h2>Esto es lo que voy a crear</h2><p>Revisa el concepto. No se gastará en generación hasta que lo apruebes.</p></div>
               <div className="plan-layout">
-                <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>CERO CABLES<br/><em>ENREDADOS</em></strong><span>Orden compacto y personalizado.</span></div><div className="product-orbit"><div className="product-placeholder"><span>FOTO REAL</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">COTIZA EL TUYO</div><div className="preview-signature">Printoria <span>3D</span></div></div>
-                <div className="plan-details"><article><span className="detail-label">PRODUCTO ANALIZADO</span><h3>{analysis?.product_summary ?? "Proyecto Printoria"}</h3><p>{analysis?.primary_benefit ?? "El concepto final se construirá con tus respuestas."}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO INICIAL</span><strong>{analysis?.objective_guess ?? "Por confirmar"}</strong></article><article><span className="detail-label">FORMATO</span><strong>Feed 4:5 · 1080 × 1350</strong></article></div><article><span className="detail-label">HECHOS VERIFICADOS</span><ul>{analysis?.verified_facts.slice(0,4).map((fact) => <li key={fact}>{fact}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Assets protegidos</strong><p>{analysis?.preservation_rules[0] ?? "Las fotografías reales no serán reinterpretadas."}</p></div></div></div>
+                <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit"><div className="product-placeholder"><span>LOCKED ASSET</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
+                <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{creativePlan?.visual_composition.map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{creativePlan?.ai_generated_elements.map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{creativePlan?.preserved_real_elements.join(" · ")}</p></div></div></div>
               </div>
               <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Guardando…" : "Aprobar plan"} <span>✓</span></button></div>
             </section>

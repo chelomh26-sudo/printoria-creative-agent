@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- private Supabase signed URLs expire and should not be optimized */
 
 import { ChangeEvent, useMemo, useState } from "react";
 import Link from "next/link";
@@ -7,6 +8,7 @@ type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
 type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
 type CreativePlan = { concept: string; rationale: string; objective: string; audience: string; format: string; visual_composition: string[]; hero_asset: string; scene: string; headline: string; subheadline: string; cta: string; references_used: string[]; ai_generated_elements: string[]; preserved_real_elements: string[]; restrictions: string[]; qa_checklist: string[] };
+type ImageResult = { url: string; model: string; imageCostUsd: number; totalCostUsd: number };
 const steps = [
   { id: "input", label: "Entrada" },
   { id: "questions", label: "Preguntas" },
@@ -25,6 +27,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [imageResult, setImageResult] = useState<ImageResult | null>(null);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
@@ -92,8 +95,12 @@ export default function Home() {
     const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve", projectId, plan }) });
     const result = await response.json();
     setBusy(false);
-    if (!response.ok) setNotice(result.error ?? "No se pudo aprobar el plan.");
-    else setStage("approved");
+    if (!response.ok || !result.imageUrl) setNotice(result.error ?? "No se pudo generar la imagen.");
+    else {
+      setImageResult({ url: result.imageUrl, model: result.model, imageCostUsd: result.imageCostUsd, totalCostUsd: result.totalCostUsd });
+      setNotice("");
+      setStage("approved");
+    }
   }
 
   return (
@@ -110,7 +117,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-status">
           <div className="status-row"><span>Plan real · v0.3</span><span className="status-pill">Activo</span></div>
-          <p>OpenRouter y Supabase conectados. La generación de imagen será el siguiente checkpoint.</p>
+          <p>GPT Mini analiza y crea el brief. Seedream 4.5 genera el borrador visual después de aprobar.</p>
         </div>
       </aside>
 
@@ -161,12 +168,13 @@ export default function Home() {
                 <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit"><div className="product-placeholder"><span>LOCKED ASSET</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
                 <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{creativePlan?.visual_composition.map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{creativePlan?.ai_generated_elements.map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{creativePlan?.preserved_real_elements.join(" · ")}</p></div></div></div>
               </div>
-              <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Guardando…" : "Aprobar plan"} <span>✓</span></button></div>
+              {notice && <p className="form-notice" role="alert">{notice}</p>}
+              <div className="panel-actions approval-actions"><button className="secondary-button" onClick={() => setStage("questions")} type="button">Ajustar respuestas</button><button className="primary-button" disabled={busy} onClick={approvePlan} type="button">{busy ? "Generando imagen…" : "Aprobar y generar"} <span>✓</span></button></div>
             </section>
           )}
 
           {stage === "approved" && (
-            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">PLAN APROBADO</span><h2>El flujo está listo para conectarse</h2><p>La siguiente versión llamará al modelo de imagen únicamente después de esta aprobación y registrará el costo real.</p><div className="connection-list"><div><span>1</span><strong>Supabase</strong><small>Proyectos, assets y versiones</small></div><div><span>2</span><strong>OpenRouter</strong><small>Análisis y brief estructurado</small></div><div><span>3</span><strong>Modelo visual</strong><small>Generación después de aprobar</small></div></div><button className="primary-button" onClick={() => setStage("input")} type="button">Crear otro proyecto</button></section>
+            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu primera imagen está lista</h2><p>Seedream creó este borrador 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>Imagen: ${imageResult.imageCostUsd.toFixed(4)} USD · Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><button className="primary-button" onClick={() => setStage("input")} type="button">Crear otro proyecto</button></section>
           )}
         </div>
       </section>

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-const supabaseUrl = rawSupabaseUrl?.replace(/\/(?:rest|auth|storage)\/v1\/?$/, "").replace(/\/$/, "");
+// The project URL is public by design; only the publishable key is environment-driven.
+const supabaseUrl = "https://sjstuvixonakpjezkmpk.supabase.co";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);

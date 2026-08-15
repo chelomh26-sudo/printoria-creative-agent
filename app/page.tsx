@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useMemo, useState } from "react";
+import Link from "next/link";
 
 type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
@@ -103,9 +104,9 @@ export default function Home() {
           <div><p className="brand-name">Printoria</p><p className="brand-product">Creative Agent</p></div>
         </div>
         <nav className="side-nav" aria-label="Navegación principal">
-          <button className="nav-item active" type="button"><span>✦</span> Nuevo creativo</button>
-          <button className="nav-item" type="button"><span>▦</span> Mis proyectos</button>
-          <button className="nav-item" type="button"><span>◇</span> Biblioteca de marca</button>
+          <Link className="nav-item active" href="/"><span>✦</span> Nuevo creativo</Link>
+          <Link className="nav-item" href="/projects"><span>▦</span> Mis proyectos</Link>
+          <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
         </nav>
         <div className="sidebar-status">
           <div className="status-row"><span>Plan real · v0.3</span><span className="status-pill">Activo</span></div>

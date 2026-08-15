@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 120;
 
-const IMAGE_MODEL = "bytedance-seed/seedream-4.5";
-const IMAGE_ESTIMATED_COST_USD = 0.04;
+const IMAGE_MODEL = "openai/gpt-image-2";
+const IMAGE_ESTIMATED_COST_USD = 0.13;
 
 const ANALYSIS_SCHEMA = {
   type: "object",
@@ -115,7 +115,7 @@ async function analyzeWithOpenRouter(idea: string, files: File[]) {
 
 function imagePrompt(plan: Record<string, unknown>) {
   const list = (value: unknown) => Array.isArray(value) ? value.join("; ") : String(value ?? "");
-  return `Crea un anuncio publicitario premium para Instagram/Facebook Feed, relación 4:5, para Printoria 3D Studio.
+  return `Diseña una pieza publicitaria premium terminada para Instagram/Facebook Feed, relación 4:5, para Printoria 3D Studio. Debe parecer trabajo de un director de arte profesional, no una plantilla automática.
 
 CONCEPTO: ${String(plan.concept ?? "")}
 ESCENARIO: ${String(plan.scene ?? "")}
@@ -125,7 +125,7 @@ HEADLINE EXACTO: ${String(plan.headline ?? "")}
 SUBHEADLINE EXACTO: ${String(plan.subheadline ?? "")}
 CTA EXACTO: ${String(plan.cta ?? "")}
 
-Dirección visual: fotografía publicitaria limpia, moderna, profesional y comercial; jerarquía clara; producto protagonista; iluminación de estudio; alto contraste; espacio negativo; diseño listo para Meta Ads. Paleta Printoria: verde lima #96D629, negro #0B0B0B, carbón #202428, blanco #E1E0E0 y gris #555452. Usa sólo los textos indicados, perfectamente legibles y bien escritos. No inventes precios, descuentos, promociones, materiales, funciones ni datos.
+Dirección visual: fotografía publicitaria limpia, moderna, profesional y comercial; jerarquía clara; producto protagonista; iluminación de estudio; alto contraste; espacio negativo; diseño listo para Meta Ads. Identidad visual: negro y carbón dominantes, acentos verde lima brillante, blanco y gris neutro. IMPORTANTE: los nombres y códigos de colores son instrucciones internas; jamás los escribas dentro del anuncio. No muestres códigos HEX, nombres de colores, guías, retículas, etiquetas técnicas ni texto de relleno. Usa solamente el headline, subheadline y CTA indicados arriba, perfectamente legibles y bien escritos. No inventes precios, descuentos, promociones, materiales, funciones ni datos.
 
 Las imágenes adjuntas son referencias reales del producto. Mantén al máximo su identidad visual, forma, color, conectores, letras, cantidades y detalles. No agregues productos inexistentes ni cambies nombres. Restricciones adicionales: ${list(plan.restrictions)}.`;
 }
@@ -139,8 +139,8 @@ async function generateImageWithOpenRouter(prompt: string, references: string[])
     body: JSON.stringify({
       model: IMAGE_MODEL,
       prompt,
-      resolution: "2K",
       aspect_ratio: "4:5",
+      quality: "high",
       n: 1,
       input_references: references.map((url) => ({ type: "image_url", image_url: { url } })),
     }),
@@ -268,9 +268,9 @@ export async function PATCH(request: Request) {
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });
         if (upload.error) throw upload.error;
-        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "4:5", resolution: "2K" } });
+        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "4:5", quality: "high" } });
         if (assetInsert.error) throw assetInsert.error;
-        const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "4:5", resolution: "2K" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
+        const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "4:5", quality: "high" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
         if (completed.error) throw completed.error;
         const { data: costs } = await supabase.from("creative_generations").select("cost_usd").eq("project_id", body.projectId).eq("status", "completed");
         const totalCost = (costs ?? []).reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);

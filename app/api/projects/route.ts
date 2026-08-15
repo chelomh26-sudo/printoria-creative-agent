@@ -121,14 +121,19 @@ async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown
   return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
 }
 
-async function analyzeWithOpenRouter(idea: string, files: File[], brandContext: string) {
+async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[], brandContext: string, brandVisuals: { name: string; url: string }[]) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
-  const imageParts = await Promise.all(files.slice(0, 4).map(async (file) => ({
-    type: "image_url",
-    image_url: { url: `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}` },
-  })));
-  const system = `Eres el Director Creativo y Analista Multimodal de Printoria 3D Studio, negocio local de Ciudad Victoria, Tamaulipas. Analiza antes de crear. Nunca generes una imagen en esta fase. Nunca inventes precio, material, promoción, función, compatibilidad, disponibilidad ni tiempo de entrega. Distingue hechos visibles, datos proporcionados e hipótesis. Si una foto es producto real o pedido real, trátala como LOCKED: puede escalarse, rotarse, recortarse y posicionarse, pero no regenerarse ni cambiar textos, nombres, cantidades, colores o detalles. Los REFERENCE ASSETS sólo inspiran dirección visual; no son evidencia del producto. Marca: cercana, profesional y creativa; vende beneficios y soluciones. Paleta: #96D629, #E1E0E0, #0B0B0B, #555452, #202428. Produce entre 3 y 8 preguntas específicas. Además de los datos comerciales faltantes, SIEMPRE confirma al menos dos decisiones de diseño que no estén claras: estilo/atmósfera, escenario, composición, protagonismo del producto, cantidad de texto, uso de logo/mascota o referencia visual. No preguntes algo ya respondido. Para single_choice y multiple_choice ofrece opciones concretas e incluye 'Otro' cuando tenga sentido. Usa free_text sólo si una lista cerrada no basta.`;
+  const imageParts: Array<Record<string, unknown>> = [];
+  for (const [index, file] of files.slice(0, 4).entries()) {
+    imageParts.push({ type: "text", text: `ARCHIVO DEL PROYECTO ${index + 1}: ${file.name} · CLASIFICACIÓN: ${(roles[index] ?? "reference").toUpperCase()}` });
+    imageParts.push({ type: "image_url", image_url: { url: `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}` } });
+  }
+  for (const visual of brandVisuals) {
+    imageParts.push({ type: "text", text: `REFERENCIA VISUAL APROBADA DE LA BIBLIOTECA: ${visual.name}. Analiza su jerarquía, escena, escala, iluminación y relación texto-producto.` });
+    imageParts.push({ type: "image_url", image_url: { url: visual.url } });
+  }
+  const system = `Eres el Director Creativo y Analista Multimodal de Printoria 3D Studio, negocio local de Ciudad Victoria, Tamaulipas. Analiza antes de crear. Nunca generes una imagen en esta fase. Nunca inventes precio, material, promoción, función, compatibilidad, disponibilidad ni tiempo de entrega. Distingue hechos visibles, datos proporcionados e hipótesis. Si una foto es producto real o pedido real, trátala como LOCKED: puede escalarse, rotarse, recortarse y posicionarse, pero no regenerarse ni cambiar textos, nombres, cantidades, colores o detalles. Los REFERENCE ASSETS sólo inspiran dirección visual; no son evidencia del producto. Debes mirar y comparar realmente las referencias visuales adjuntas. Marca: cercana, profesional y creativa; vende beneficios y soluciones. Paleta: #96D629, #E1E0E0, #0B0B0B, #555452, #202428. Produce entre 5 y 8 preguntas específicas. OBLIGATORIO: incluye preguntas con ids visual_reference, scene_and_context, interaction_or_demo y message_angle. Pregunta qué referencia desea seguir y con qué grado de fidelidad; qué escenario/contexto debe verse; qué interacción demostrará el uso; y qué recompensa/beneficio debe dominar el headline. Las opciones deben describir decisiones concretas basadas en este producto y las referencias observadas, no opciones genéricas. También pregunta uso de logo/mascota si no está claro. No preguntes algo ya respondido. Para single_choice y multiple_choice ofrece opciones concretas e incluye 'Otro' cuando tenga sentido. Usa free_text sólo si una lista cerrada no basta.\n\n${MARKETING_SKILL}\n\n${DESIGN_SKILL}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -249,22 +254,29 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const idea = String(form.get("idea") ?? "").trim();
     const title = String(form.get("title") ?? "Nuevo creativo");
-    const locked = form.get("assetLocked") === "true";
+    let assetRoles: string[] = [];
+    try { assetRoles = JSON.parse(String(form.get("assetRoles") ?? "[]")); } catch { assetRoles = []; }
     if (idea.length < 12) return NextResponse.json({ error: "La idea es demasiado corta." }, { status: 400 });
     const { data: project, error } = await supabase.from("creative_projects").insert({ title, idea, status: "questions" }).select("id").single();
     if (error || !project) throw error ?? new Error("No se creó el proyecto.");
     const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
-    for (const entry of files) {
+    for (const [index, entry] of files.entries()) {
       if (!(entry instanceof File)) continue;
       const safeName = entry.name.replace(/[^a-zA-Z0-9._-]/g, "-");
       const path = `private/${project.id}/${crypto.randomUUID()}-${safeName}`;
       const upload = await supabase.storage.from("creative-assets").upload(path, entry, { contentType: entry.type });
       if (upload.error) throw upload.error;
-      const asset = await supabase.from("creative_assets").insert({ project_id: project.id, asset_role: locked ? "locked" : "reference", original_name: entry.name, storage_path: path, mime_type: entry.type });
+      const assetRole = assetRoles[index] === "locked" ? "locked" : "reference";
+      const asset = await supabase.from("creative_assets").insert({ project_id: project.id, asset_role: assetRole, original_name: entry.name, storage_path: path, mime_type: entry.type });
       if (asset.error) throw asset.error;
     }
     const brandAssets = await loadBrandAssets(supabase);
-    const ai = await analyzeWithOpenRouter(idea, files, describeBrandAssets(brandAssets));
+    const brandVisuals: { name: string; url: string }[] = [];
+    for (const asset of brandAssets.filter((item) => item.category === "visual_reference").slice(0, 2)) {
+      const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
+      if (signed.data?.signedUrl) brandVisuals.push({ name: asset.name, url: signed.data.signedUrl });
+    }
+    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals);
     await supabase.from("creative_generations").insert({
       project_id: project.id,
       kind: "analysis",

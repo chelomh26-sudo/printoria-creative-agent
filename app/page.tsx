@@ -30,6 +30,7 @@ export default function Home() {
   const [imageResult, setImageResult] = useState<ImageResult | null>(null);
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
@@ -50,6 +51,7 @@ export default function Home() {
       setAnswers(savedAnswers);
       setCreativePlan(savedPlan);
       setAnalysis(result.analysis ?? null);
+      if (result.sourceAssetUrl) setPreviewAssetUrl(result.sourceAssetUrl);
       if (result.imageUrl) setImageResult({ url: result.imageUrl, model: result.imageModel ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) });
       if (result.imageUrl) setStage("approved");
       else if (savedPlan) setStage("plan");
@@ -58,6 +60,13 @@ export default function Home() {
       setNotice("Proyecto existente cargado. Puedes modificarlo y continuar.");
     }).catch((reason) => setNotice(reason.message));
   }, []);
+
+  useEffect(() => {
+    if (!files[0]) return;
+    const objectUrl = URL.createObjectURL(files[0]);
+    setPreviewAssetUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [files]);
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     selectImageFiles(Array.from(event.target.files ?? []));
@@ -234,7 +243,7 @@ export default function Home() {
             <section className="panel">
               <div className="panel-heading"><span className="section-kicker">ANTES DE GENERAR</span><h2>Esto es lo que voy a crear</h2><p>Revisa el concepto. No se gastará en generación hasta que lo apruebes.</p></div>
               <div className="plan-layout">
-                <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong className={headlineClass}>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit"><div className="product-placeholder"><span>LOCKED ASSET</span></div><span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
+                <div className="creative-preview"><div className="preview-grid"/><span className="preview-tag">META AD · 4:5</span><div className="preview-copy"><strong className={headlineClass}>{creativePlan?.headline ?? "PLAN CREATIVO"}</strong><span>{creativePlan?.subheadline}</span></div><div className="product-orbit">{previewAssetUrl ? <div className="product-photo"><img alt="Producto real protegido" src={previewAssetUrl}/><span>PRODUCTO REAL</span></div> : <div className="product-placeholder"><span>LOCKED ASSET</span></div>}<span className="orbit one"/><span className="orbit two"/></div><div className="preview-cta">{creativePlan?.cta ?? "COTIZA EL TUYO"}</div><div className="preview-signature">Printoria <span>3D</span></div></div>
                 <div className="plan-details"><article><span className="detail-label">CONCEPTO</span><h3>{creativePlan?.concept}</h3><p>{creativePlan?.rationale}</p></article><div className="detail-grid"><article><span className="detail-label">OBJETIVO</span><strong>{creativePlan?.objective}</strong></article><article><span className="detail-label">FORMATO</span><strong>{creativePlan?.format}</strong></article></div><article><span className="detail-label">COMPOSICIÓN</span><ul>{(creativePlan?.visual_composition ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><article><span className="detail-label">GENERADO POR IA</span><ul>{(creativePlan?.ai_generated_elements ?? []).map((item) => <li key={item}>{item}</li>)}</ul></article><div className="preservation-box"><span className="lock-symbol">⌑</span><div><strong>Elementos reales preservados</strong><p>{(creativePlan?.preserved_real_elements ?? []).join(" · ")}</p></div></div></div>
               </div>
               <div className="plan-correction"><label className="field-label" htmlFor="plan-correction">¿Qué quieres cambiar antes de aprobar?</label><p>Escribe la corrección con tus palabras. La IA modificará el plan, pero todavía no generará ninguna imagen.</p><textarea id="plan-correction" onChange={(event) => setCorrectionRequest(event.target.value)} placeholder="Ejemplo: Quiero el producto más grande, menos texto y el logo arriba a la derecha. Conserva todo lo demás." value={correctionRequest}/><button className="secondary-button" disabled={busy || correctionRequest.trim().length < 3} onClick={revisePlan} type="button">{busy ? "Corrigiendo plan…" : "Aplicar corrección al plan"}</button></div>

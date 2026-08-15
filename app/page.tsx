@@ -140,7 +140,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-status">
           <div className="status-row"><span>Plan real · v0.3</span><span className="status-pill">Activo</span></div>
-          <p>GPT Mini analiza y crea el brief. Seedream 4.5 genera el borrador visual después de aprobar.</p>
+          <p>GPT Mini analiza y crea el brief. GPT Image 2 genera la pieza visual después de aprobar.</p>
         </div>
       </aside>
 
@@ -197,7 +197,7 @@ export default function Home() {
           )}
 
           {stage === "approved" && (
-            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu primera imagen está lista</h2><p>Seedream creó este borrador 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); }} type="button">Crear otro proyecto</button></div></section>
+            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>
@@ -205,7 +205,7 @@ export default function Home() {
   );
 }
 
-const IMAGE_MODEL_LABEL = "bytedance-seed/seedream-4.5";
+const IMAGE_MODEL_LABEL = "openai/gpt-image-2";
 
 function DynamicQuestionField({ question, answer, onAnswer }: { question: DynamicQuestion; answer: string | string[] | undefined; onAnswer: (id: string, value: string, multiple?: boolean) => void }) {
   if (question.type === "free_text") return <fieldset className="question-block"><legend>{question.question}</legend><p>{question.reason}</p><textarea className="dynamic-answer" onChange={(event) => onAnswer(question.id, event.target.value)} placeholder={question.placeholder ?? "Escribe tu respuesta"} value={typeof answer === "string" ? answer : ""} /></fieldset>;

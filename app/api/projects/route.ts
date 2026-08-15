@@ -142,7 +142,6 @@ async function generateImageWithOpenRouter(prompt: string, references: string[])
       resolution: "2K",
       aspect_ratio: "4:5",
       n: 1,
-      output_format: "png",
       input_references: references.map((url) => ({ type: "image_url", image_url: { url } })),
     }),
   });
@@ -251,10 +250,11 @@ export async function PATCH(request: Request) {
           if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
         }
         const rendered = await generateImageWithOpenRouter(prompt, references);
-        const outputPath = `generated/${body.projectId}/${generation.id}.png`;
+        const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";
+        const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });
         if (upload.error) throw upload.error;
-        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.png`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "4:5", resolution: "2K" } });
+        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "4:5", resolution: "2K" } });
         if (assetInsert.error) throw assetInsert.error;
         const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "4:5", resolution: "2K" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
         if (completed.error) throw completed.error;

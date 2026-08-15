@@ -1,8 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase, supabaseConfigured } from "@/lib/supabase";
+import { ChangeEvent, useMemo, useState } from "react";
 
 type Stage = "input" | "questions" | "plan" | "approved";
 const steps = [
@@ -21,40 +19,10 @@ export default function Home() {
   const [goal, setGoal] = useState("orders");
   const [personalization, setPersonalization] = useState<string[]>(["name", "color"]);
   const [notice, setNotice] = useState("");
-  const [session, setSession] = useState<Session | null>(null);
-  const [authReady, setAuthReady] = useState(!supabase);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
-
-  useEffect(() => {
-    if (!supabase) {
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setAuthReady(true);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => data.subscription.unsubscribe();
-  }, []);
-
-  async function authenticate(event: FormEvent) {
-    event.preventDefault();
-    if (!supabase) return;
-    setBusy(true);
-    setNotice("");
-    const result = authMode === "login"
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    setBusy(false);
-    if (result.error) setNotice(result.error.message);
-    else if (authMode === "signup" && !result.data.session) setNotice("Revisa tu correo para confirmar la cuenta y después inicia sesión.");
-  }
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []));
@@ -69,99 +37,46 @@ export default function Home() {
       setNotice("Cuéntame un poco más de la idea para poder analizarla.");
       return;
     }
-    if (!supabase || !session) {
-      setNotice("Inicia sesión para guardar el proyecto.");
-      return;
-    }
     setBusy(true);
     setNotice("");
-    const { data: project, error } = await supabase.from("creative_projects").insert({
-      owner_id: session.user.id,
-      title: projectTitle,
-      idea: idea.trim(),
-      status: "questions",
-    }).select("id").single();
-    if (error || !project) {
+    const form = new FormData();
+    form.set("idea", idea.trim());
+    form.set("title", projectTitle);
+    form.set("assetLocked", String(assetLocked));
+    files.forEach((file) => form.append("files", file));
+    const response = await fetch("/api/projects", { method: "POST", body: form });
+    const result = await response.json();
+    if (!response.ok || !result.id) {
       setBusy(false);
-      setNotice(error?.message ?? "No se pudo guardar el proyecto.");
+      setNotice(result.error ?? "No se pudo guardar el proyecto.");
       return;
     }
-    for (const file of files) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-      const path = `${session.user.id}/${project.id}/${crypto.randomUUID()}-${safeName}`;
-      const upload = await supabase.storage.from("creative-assets").upload(path, file);
-      if (upload.error) {
-        setBusy(false);
-        setNotice(`El proyecto se guardó, pero falló ${file.name}: ${upload.error.message}`);
-        setProjectId(project.id);
-        return;
-      }
-      await supabase.from("creative_assets").insert({
-        project_id: project.id,
-        owner_id: session.user.id,
-        asset_role: assetLocked ? "locked" : "reference",
-        original_name: file.name,
-        storage_path: path,
-        mime_type: file.type,
-      });
-    }
-    setProjectId(project.id);
+    setProjectId(result.id);
     setBusy(false);
     setStage("questions");
   }
 
   async function createPlan() {
-    if (!supabase || !projectId || !session) return;
+    if (!projectId) return;
     setBusy(true);
     const answers = { mechanism, personalization, goal };
-    const { error } = await supabase.from("creative_projects").update({
-      form_answers: answers,
-      objective: goal,
-      status: "plan",
-      updated_at: new Date().toISOString(),
-    }).eq("id", projectId);
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "plan", projectId, answers, goal }) });
+    const result = await response.json();
     setBusy(false);
-    if (error) setNotice(error.message);
+    if (!response.ok) setNotice(result.error ?? "No se pudo guardar el plan.");
     else setStage("plan");
   }
 
   async function approvePlan() {
-    if (!supabase || !projectId || !session) return;
+    if (!projectId) return;
     setBusy(true);
     const plan = { concept: "Del enredo al orden", format: "1080x1350", asset_preservation: assetLocked };
-    const { error } = await supabase.from("creative_projects").update({
-      creative_plan: plan,
-      status: "approved",
-      approved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", projectId);
-    if (!error) await supabase.from("creative_briefs").upsert({ project_id: projectId, owner_id: session.user.id, brief: plan, approved: true }, { onConflict: "project_id" });
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve", projectId, plan }) });
+    const result = await response.json();
     setBusy(false);
-    if (error) setNotice(error.message);
+    if (!response.ok) setNotice(result.error ?? "No se pudo aprobar el plan.");
     else setStage("approved");
   }
-
-  if (!authReady) return <main className="auth-screen"><div className="auth-card"><span className="auth-loader" />Conectando con Printoria…</div></main>;
-
-  if (!supabaseConfigured) return <main className="auth-screen"><div className="auth-card"><h1>Falta conectar Supabase</h1><p>Las variables de entorno todavía no están disponibles en este despliegue.</p></div></main>;
-
-  if (!session) return (
-    <main className="auth-screen">
-      <form className="auth-card" onSubmit={authenticate}>
-        <div className="brand-lockup auth-brand"><div className="brand-cube" aria-hidden="true"><span /></div><div><p className="brand-name">Printoria</p><p className="brand-product">Creative Agent</p></div></div>
-        <span className="section-kicker">ACCESO PRIVADO · V0.2.1</span>
-        <h1>{authMode === "login" ? "Entra a tu estudio creativo" : "Crea tu acceso"}</h1>
-        <p>Tus proyectos, fotografías y costos quedarán guardados de forma privada.</p>
-        <label className="field-label" htmlFor="email">Correo</label>
-        <input id="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
-        <label className="field-label" htmlFor="password">Contraseña</label>
-        <input id="password" minLength={6} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
-        {notice && <p className="form-notice" role="alert">{notice}</p>}
-        <button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? "Procesando…" : authMode === "login" ? "Entrar" : "Crear cuenta"}</button>
-        <button className="text-button" onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setNotice(""); }} type="button">{authMode === "login" ? "Crear mi primera cuenta" : "Ya tengo una cuenta"}</button>
-      </form>
-    </main>
-  );
 
   return (
     <main className="app-shell">
@@ -184,7 +99,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">PROYECTO NUEVO</p><h1>{projectTitle}</h1></div>
-          <div className="topbar-actions"><div className="budget-card"><span>Costo estimado</span><strong>{stage === "input" ? "$0.00" : stage === "questions" ? "$0.05" : "$0.08"}</strong><small>Límite $0.80 USD</small></div><button className="logout-button" onClick={() => supabase?.auth.signOut()} type="button">Salir</button></div>
+          <div className="topbar-actions"><div className="budget-card"><span>Costo estimado</span><strong>{stage === "input" ? "$0.00" : stage === "questions" ? "$0.05" : "$0.08"}</strong><small>Límite $0.80 USD</small></div><button className="logout-button" onClick={() => fetch("/api/access", { method: "DELETE" }).then(() => location.assign("/access"))} type="button">Salir</button></div>
         </header>
 
         <ol className="stepper" aria-label="Progreso del creativo">

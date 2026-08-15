@@ -6,6 +6,22 @@ export const maxDuration = 120;
 const IMAGE_MODEL = "openai/gpt-image-2";
 const IMAGE_ESTIMATED_COST_USD = 0.13;
 
+const MARKETING_SKILL = `MÓDULO DE ESTRATEGIA DE MARKETING:
+- No describas simplemente lo que hace el producto. Vende la recompensa que obtiene el cliente.
+- Traduce función → beneficio → resultado emocional o comercial.
+- Prioriza claridad inmediata, deseo, confianza, prueba social y una promesa concreta verificable.
+- Para productos de reseñas, el territorio creativo es: más confianza, mejor reputación, más reseñas y menor fricción. Ejemplos de tono, no para copiar literalmente: "Reseñas al instante", "Convierte visitas en confianza", "Más reseñas. Más confianza."
+- Evita titulares explicativos como "Facilita que tus clientes..." y frases largas de manual.
+- No prometas resultados garantizados ni inventes datos.`;
+
+const DESIGN_SKILL = `MÓDULO DE DIRECCIÓN DE ARTE:
+- El concepto visual debe relacionarse específicamente con el producto y el beneficio, no usar una composición genérica.
+- Identifica la silueta real del producto y conviértela en protagonista; no la sustituyas por figuras geométricas de otro proyecto.
+- Construye una escena que explique el uso en menos de dos segundos: contexto pertinente, interacción clara y jerarquía visual.
+- Usa un solo punto focal, suficiente espacio negativo y máximo tres niveles de texto.
+- La previsualización es un mapa de composición, pero debe mostrar la fotografía real del producto cuando exista.
+- Logo oficial visible, legible y separado del CTA. Mascota sólo si aporta a la idea y no compite con el producto.`;
+
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
@@ -69,7 +85,7 @@ async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
-  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Convierte el análisis y las respuestas aprobadas en un plan visual ejecutable para Instagram/Facebook Feed 4:5, 1080 × 1350. No generes imagen todavía. Debes tomar decisiones explícitas de dirección de arte: jerarquía, encuadre, escala del producto, escenario, iluminación, profundidad, ubicación del logo, densidad de texto y CTA. No inventes precios, descuentos, materiales, compatibilidad, tiempos ni funciones. El producto real debe ser protagonista. Todo LOCKED ASSET se preserva sin regenerar, reinterpretar, cambiar texto, nombres, cantidades, color, forma o detalles. Los REFERENCE ASSETS sólo inspiran estilo y composición; nunca sustituyen al producto real. Incluye siempre el logo oficial cuando haya uno disponible. La IA sólo puede crear fondo, iluminación, ambiente y elementos decorativos que no alteren el producto. El copy debe ser español mexicano, claro y comercial. REGLA DE COPY: headline de 2 a 6 palabras (máximo absoluto 8), subheadline de máximo 12 palabras y CTA de máximo 4 palabras. El beneficio debe ser directo; no conviertas una explicación en titular. Un solo CTA. Identidad Printoria: verde #96D629, negro #0B0B0B, carbón #202428, blanco #E1E0E0 y gris #555452. Devuelve un único plan, no alternativas.`;
+  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Convierte el análisis y las respuestas aprobadas en un plan visual ejecutable para Instagram/Facebook Feed 4:5, 1080 × 1350. No generes imagen todavía. Debes tomar decisiones explícitas de dirección de arte: jerarquía, encuadre, escala del producto, escenario, iluminación, profundidad, ubicación del logo, densidad de texto y CTA. No inventes precios, descuentos, materiales, compatibilidad, tiempos ni funciones. El producto real debe ser protagonista. Todo LOCKED ASSET se preserva sin regenerar, reinterpretar, cambiar texto, nombres, cantidades, color, forma o detalles. Los REFERENCE ASSETS sólo inspiran estilo y composición; nunca sustituyen al producto real. Incluye siempre el logo oficial cuando haya uno disponible. La IA sólo puede crear fondo, iluminación, ambiente y elementos decorativos que no alteren el producto. El copy debe ser español mexicano, claro y comercial. REGLA DE COPY: headline de 2 a 6 palabras (máximo absoluto 8), subheadline de máximo 12 palabras y CTA de máximo 4 palabras. El beneficio debe ser directo; no conviertas una explicación en titular. Un solo CTA. Identidad Printoria: verde #96D629, negro #0B0B0B, carbón #202428, blanco #E1E0E0 y gris #555452. Devuelve un único plan, no alternativas.\n\n${MARKETING_SKILL}\n\n${DESIGN_SKILL}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -92,7 +108,7 @@ async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
-  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Corrige un plan creativo existente siguiendo exactamente la solicitud del usuario. No generes imagen. Conserva todo lo que el usuario no pidió cambiar. No inventes información comercial. Mantén las reglas LOCKED/REFERENCE, la identidad de marca y el formato 4:5. El headline debe tener de 2 a 6 palabras (máximo absoluto 8), el subheadline máximo 12 palabras y el CTA máximo 4 palabras, incluso si estás corrigiendo otra parte del plan. Devuelve el plan completo corregido usando el esquema solicitado.`;
+  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Corrige un plan creativo existente siguiendo exactamente la solicitud del usuario. No generes imagen. Conserva todo lo que el usuario no pidió cambiar. No inventes información comercial. Mantén las reglas LOCKED/REFERENCE, la identidad de marca y el formato 4:5. El headline debe tener de 2 a 6 palabras (máximo absoluto 8), el subheadline máximo 12 palabras y el CTA máximo 4 palabras, incluso si estás corrigiendo otra parte del plan. Devuelve el plan completo corregido usando el esquema solicitado.\n\n${MARKETING_SKILL}\n\n${DESIGN_SKILL}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -145,6 +161,8 @@ CTA EXACTO: ${String(plan.cta ?? "")}
 REFERENCIAS UTILIZADAS: ${list(plan.references_used)}
 
 Dirección visual: fotografía publicitaria limpia, moderna, profesional y comercial; jerarquía clara; producto protagonista; iluminación de estudio; alto contraste; espacio negativo; diseño listo para Meta Ads. Identidad visual: negro y carbón dominantes, acentos verde lima brillante, blanco y gris neutro. Incluye el logo oficial de Printoria visible y con respiración, sin redibujarlo ni alterar texto, proporciones o colores. IMPORTANTE: los nombres y códigos de colores son instrucciones internas; jamás los escribas dentro del anuncio. No muestres códigos HEX, nombres de colores, guías, retículas, etiquetas técnicas ni texto de relleno. Usa solamente el headline, subheadline y CTA indicados arriba, perfectamente legibles y bien escritos. No inventes precios, descuentos, promociones, materiales, funciones ni datos.
+
+${DESIGN_SKILL}
 
 Las imágenes adjuntas son referencias reales del producto. Mantén al máximo su identidad visual, forma, color, conectores, letras, cantidades y detalles. No agregues productos inexistentes ni cambies nombres. Restricciones adicionales: ${list(plan.restrictions)}.`;
 }
@@ -204,12 +222,18 @@ export async function GET(request: Request) {
       if (error || !project) throw error ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", projectId).eq("kind", "analysis").eq("status", "completed").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const { data: generatedAsset } = await supabase.from("creative_assets").select("storage_path,metadata").eq("project_id", projectId).eq("asset_role", "generated").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: sourceAsset } = await supabase.from("creative_assets").select("storage_path").eq("project_id", projectId).in("asset_role", ["locked", "reference"]).order("created_at", { ascending: true }).limit(1).maybeSingle();
       let imageUrl: string | null = null;
+      let sourceAssetUrl: string | null = null;
       if (generatedAsset?.storage_path) {
         const signed = await supabase.storage.from("creative-assets").createSignedUrl(generatedAsset.storage_path, 3600);
         imageUrl = signed.data?.signedUrl ?? null;
       }
-      return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, imageModel: generatedAsset?.metadata?.model ?? null });
+      if (sourceAsset?.storage_path) {
+        const signed = await supabase.storage.from("creative-assets").createSignedUrl(sourceAsset.storage_path, 3600);
+        sourceAssetUrl = signed.data?.signedUrl ?? null;
+      }
+      return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, sourceAssetUrl, imageModel: generatedAsset?.metadata?.model ?? null });
     }
     const { data, error } = await supabase.from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
     if (error) throw error;

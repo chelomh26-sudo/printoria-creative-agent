@@ -23,7 +23,6 @@ export default function PublicacionesPage() {
   const [loading, setLoading] = useState(true);
   const [neg, setNeg] = useState("todas");
   const [filtro, setFiltro] = useState("todos");
-  const [vista, setVista] = useState<"lista" | "calendario">("lista");
   const [open, setOpen] = useState(false);
 
   const cargar = () => { fetch("/api/redes?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then((d) => setItems(d.items || [])).finally(() => setLoading(false)); };
@@ -37,19 +36,14 @@ export default function PublicacionesPage() {
   };
 
   return (
-    <WorkspaceShell active="redes" title="Publicaciones" subtitle="Sube el material, el agente arma la descripcion con tu voz de marca y lo programas.">
+    <WorkspaceShell active="redes" title="Publicaciones" subtitle="Sube el material, el agente arma la descripcion con tu voz de marca y lo dejas listo. El calendario esta en su propio modulo.">
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 6, background: "rgba(10,12,13,.6)", padding: 4, borderRadius: 12, border: "1px solid rgba(255,255,255,.08)" }}>
           {[["todas", "Todas"], ["marikekas", "Marikekas"], ["printoria", "Printoria"]].map(([k, l]) => (
             <button key={k} onClick={() => setNeg(k)} style={{ border: "none", borderRadius: 9, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: neg === k ? "rgba(150,214,41,.13)" : "transparent", color: neg === k ? "#c5f169" : "#a6abad" }}>{l}</button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-          {[["lista", "Lista"], ["calendario", "Calendario"]].map(([k, l]) => (
-            <button key={k} onClick={() => setVista(k as "lista" | "calendario")} style={{ ...btn, background: vista === k ? "rgba(150,214,41,.13)" : "transparent", padding: "8px 13px" }}>{l}</button>
-          ))}
-          <button style={btnP} onClick={() => setOpen(true)}>+ Publicar algo nuevo</button>
-        </div>
+        <button style={{ ...btnP, marginLeft: "auto" }} onClick={() => setOpen(true)}>+ Publicar algo nuevo</button>
       </div>
 
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 20 }}>
@@ -60,68 +54,32 @@ export default function PublicacionesPage() {
         ))}
       </div>
 
-      {loading ? <div className="empty-state">Cargando…</div> : vista === "lista" ? (
-        vis.length === 0 ? <div className="empty-state"><strong>Nada por aqui</strong><p>Dale a “Publicar algo nuevo” para empezar.</p></div> : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {vis.map((it) => (
-              <div key={it.id} style={{ ...card, padding: 14, display: "flex", gap: 14 }}>
-                {it.asset_url ? <img src={it.asset_url} alt="" style={{ width: 78, height: 78, objectFit: "cover", borderRadius: 10, flex: "none" }} /> : <div style={{ width: 78, height: 78, borderRadius: 10, flex: "none", background: "rgba(150,214,41,.06)", border: "1px solid rgba(150,214,41,.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "#96d629", fontSize: 24 }}>◎</div>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
-                    <span style={net(it.red)}>{NET[it.red]?.c}</span>
-                    <span style={estp(it.estado)}><span style={{ width: 8, height: 8, borderRadius: "50%", background: EST[it.estado]?.color }} />{EST[it.estado]?.l}</span>
-                    <span style={{ color: "#8a9296", fontSize: 11 }}>{NEG[it.negocio] || it.negocio}</span>
-                  </div>
-                  <div style={{ fontSize: 13.5, fontWeight: 650, color: "#f5f6f1" }}>{it.tema}</div>
-                  {it.copy ? <div style={{ color: "#9da4a6", fontSize: 11.5, lineHeight: 1.5, marginTop: 5, maxHeight: 46, overflow: "hidden", whiteSpace: "pre-wrap" }}>{it.copy}</div> : null}
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-                    <input type="datetime-local" value={it.fecha ? String(it.fecha).slice(0, 16) : ""} onChange={(e) => patch(it, { fecha: e.target.value, estado: it.estado === "publicado" ? "publicado" : "programado" })} style={inp} />
-                    {it.estado !== "publicado" && <button style={btn} onClick={() => patch(it, { estado: "publicado" })}>✓ Marcar publicado</button>}
-                    {it.estado === "publicado" && it.link ? <a href={it.link} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: "none" }}>Ver ↗</a> : null}
-                  </div>
+      {loading ? <div className="empty-state">Cargando…</div> : vis.length === 0 ? <div className="empty-state"><strong>Nada por aqui</strong><p>Dale a “Publicar algo nuevo” para empezar.</p></div> : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {vis.map((it) => (
+            <div key={it.id} style={{ ...card, padding: 14, display: "flex", gap: 14 }}>
+              {it.asset_url ? <img src={it.asset_url} alt="" style={{ width: 78, height: 78, objectFit: "cover", borderRadius: 10, flex: "none" }} /> : <div style={{ width: 78, height: 78, borderRadius: 10, flex: "none", background: "rgba(150,214,41,.06)", border: "1px solid rgba(150,214,41,.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "#96d629", fontSize: 24 }}>◎</div>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+                  <span style={net(it.red)}>{NET[it.red]?.c}</span>
+                  <span style={estp(it.estado)}><span style={{ width: 8, height: 8, borderRadius: "50%", background: EST[it.estado]?.color }} />{EST[it.estado]?.l}</span>
+                  <span style={{ color: "#8a9296", fontSize: 11 }}>{NEG[it.negocio] || it.negocio}</span>
+                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 650, color: "#f5f6f1" }}>{it.tema}</div>
+                {it.copy ? <div style={{ color: "#9da4a6", fontSize: 11.5, lineHeight: 1.5, marginTop: 5, maxHeight: 46, overflow: "hidden", whiteSpace: "pre-wrap" }}>{it.copy}</div> : null}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                  <input type="datetime-local" value={it.fecha ? String(it.fecha).slice(0, 16) : ""} onChange={(e) => patch(it, { fecha: e.target.value, estado: it.estado === "publicado" ? "publicado" : "programado" })} style={inp} />
+                  {it.estado !== "publicado" && <button style={btn} onClick={() => patch(it, { estado: "publicado" })}>✓ Marcar publicado</button>}
+                  {it.estado === "publicado" && it.link ? <a href={it.link} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: "none" }}>Ver ↗</a> : null}
                 </div>
               </div>
-            ))}
-          </div>
-        )
-      ) : (
-        <Calendario items={vis.filter((x) => x.estado === "programado")} />
+            </div>
+          ))}
+        </div>
       )}
 
       {open && <NuevoPost onClose={() => setOpen(false)} onDone={() => { setOpen(false); cargar(); }} />}
     </WorkspaceShell>
-  );
-}
-
-function Calendario({ items }: { items: Item[] }) {
-  const base = new Date();
-  const monday = new Date(base); monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
-  const dias = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"].map((lab, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return { lab, d }; });
-  const hoy = new Date().toDateString();
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 10, alignItems: "start" }}>
-      {dias.map(({ lab, d }) => {
-        const its = items.filter((x) => x.fecha && new Date(x.fecha).toDateString() === d.toDateString());
-        const esHoy = d.toDateString() === hoy;
-        return (
-          <div key={lab} style={{ background: "rgba(10,12,13,.5)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: 8, minHeight: 200 }}>
-            <div style={{ textAlign: "center", padding: "4px 0 10px" }}>
-              <div style={{ fontSize: 10, color: "#687073", fontWeight: 700 }}>{lab}</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: esHoy ? "#0b0b0b" : "#e6e8e3", background: esHoy ? "#96d629" : "transparent", width: 28, height: 28, lineHeight: "28px", borderRadius: "50%", margin: "3px auto 0" }}>{d.getDate()}</div>
-            </div>
-            {its.map((it) => (
-              <div key={it.id} style={{ ...card, borderTop: `3px solid ${NET[it.red]?.color || "#555"}`, overflow: "hidden", marginBottom: 8 }}>
-                {it.asset_url ? <img src={it.asset_url} alt="" style={{ width: "100%", height: 62, objectFit: "cover", display: "block" }} /> : <div style={{ height: 62, background: "rgba(150,214,41,.06)", display: "flex", alignItems: "center", justifyContent: "center", color: "#96d629" }}>◎</div>}
-                <div style={{ padding: "6px 8px" }}>
-                  <div style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 10, color: "#8a9296" }}><span style={net(it.red)}>{NET[it.red]?.c}</span>{it.fecha ? new Date(it.fecha).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" }) : ""}</div>
-                  <div style={{ fontSize: 11, color: "#e6e8e3", fontWeight: 600, marginTop: 3, lineHeight: 1.3, maxHeight: 28, overflow: "hidden" }}>{it.tema}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
@@ -226,7 +184,7 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(150,214,41,.1)", border: "1px solid rgba(150,214,41,.25)", color: "#c5f169", fontSize: 11, borderRadius: 999, padding: "5px 10px", marginBottom: 14 }}>✓ Descripcion lista</div>
             <span style={lab}>¿Que dia y hora se programa?</span>
             <input type="datetime-local" value={fecha} onChange={(e) => setFecha(e.target.value)} style={{ ...inp, width: "100%" }} />
-            <p style={{ color: "#8a9296", fontSize: 12, margin: "14px 0 0" }}>Al confirmar se guarda como <b style={{ color: "#5fd0e0" }}>programado</b>. La publicacion automatica se conecta despues.</p>
+            <p style={{ color: "#8a9296", fontSize: 12, margin: "14px 0 0" }}>Al confirmar se guarda como <b style={{ color: "#5fd0e0" }}>programado</b> y aparece en el Calendario. La publicacion automatica se conecta despues.</p>
           </>)}
 
           {err && <p className="form-notice" style={{ marginTop: 14 }}>{err}</p>}

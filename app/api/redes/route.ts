@@ -82,6 +82,15 @@ async function describir(negocio: string, red: string, tema: string, answers: Re
   return String(p.choices[0].message.content ?? "").trim();
 }
 
+async function captionProyecto(negocio: string, red: string, base: string, instruccion: string, copyActual: string, ctx: string) {
+  const sys = `Eres el social media manager de ${VOZ[negocio] || VOZ.printoria}\n\n${ctx}\n\nEscribe la descripcion (caption) para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"} en espanol mexicano, con la voz de marca, 1-2 emojis, y 8-12 hashtags locales de Ciudad Victoria al final. Corto y con antojo/beneficio. No inventes precios ni datos. Devuelve SOLO el caption.`;
+  const user = instruccion
+    ? `Anuncio: ${base}\n\nCaption actual:\n${copyActual}\n\nAjuste solicitado: ${instruccion}\nReescribe el caption aplicando el ajuste.`
+    : `Anuncio: ${base}\n\nEscribe el caption.`;
+  const p = await orFetch({ model: model(), messages: [{ role: "system", content: sys }, { role: "user", content: user }], temperature: 0.7 });
+  return String(p.choices[0].message.content ?? "").trim();
+}
+
 export async function GET() {
   try {
     const supabase = adminClient();
@@ -121,6 +130,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ id: row.id, tema: ai.tema, questions: ai.questions, asset_url });
     }
     const body = await request.json();
+    if (body.action === "caption_proyecto") {
+      const { data: proj } = await supabase.from("creative_projects").select("title,idea,creative_plan").eq("id", body.projectId).single();
+      const plan = (proj?.creative_plan || {}) as Record<string, unknown>;
+      const base = `Producto/idea: ${proj?.idea || proj?.title || ""}. Concepto: ${plan.concept || ""}. Headline: ${plan.headline || ""}. Beneficio: ${plan.subheadline || ""}. CTA: ${plan.cta || ""}.`;
+      const ctx = await productContext(supabase, body.negocio || "printoria");
+      const copy = await captionProyecto(body.negocio || "printoria", body.red || "ig", base, body.instruccion || "", body.copyActual || "", ctx);
+      return NextResponse.json({ ok: true, copy });
+    }
+    if (body.action === "desde_proyecto") {
+      const { data: proj } = await supabase.from("creative_projects").select("title,idea,creative_plan").eq("id", body.projectId).single();
+      const { data: gen } = await supabase.from("creative_assets").select("storage_path,mime_type").eq("project_id", body.projectId).eq("asset_role", "generated").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      let asset_url: string | null = null;
+      if (gen?.storage_path) {
+        const dl = await supabase.storage.from("creative-assets").download(gen.storage_path);
+        if (dl.data) {
+          const ext = gen.storage_path.split(".").pop() || "png";
+          const path = `redes/${crypto.randomUUID()}.${ext}`;
+          const buf = Buffer.from(await dl.data.arrayBuffer());
+          const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: gen.mime_type || "image/png", upsert: false });
+          if (!up.error) asset_url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+        }
+      }
+      const plan = (proj?.creative_plan || {}) as Record<string, unknown>;
+      const copy = (body.copy && String(body.copy).trim()) ? String(body.copy) : [plan.headline, plan.subheadline, plan.cta].filter(Boolean).join("\n");
+      const tema = (proj?.title as string) || String(proj?.idea || "Anuncio").slice(0, 60);
+      const estado = body.fecha ? "programado" : "listo";
+      const { data: row, error } = await supabase.from("contenido").insert({ negocio: body.negocio || "printoria", red: body.red || "ig", tipo: body.tipo || "post", tema, copy, asset_url, estado, fecha: body.fecha || null }).select("id").single();
+      if (error) throw error;
+      return NextResponse.json({ ok: true, id: row.id, asset_url });
+    }
     if (body.action === "describir") {
       const ctx = await productContext(supabase, body.negocio || "marikekas");
       const copy = await describir(body.negocio || "marikekas", body.red || "ig", body.tema || "", body.answers || {}, ctx);

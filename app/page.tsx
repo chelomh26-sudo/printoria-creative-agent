@@ -31,11 +31,20 @@ export default function Home() {
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
+  const [envRed, setEnvRed] = useState("ig");
+  const [envTipo, setEnvTipo] = useState("post");
+  const [envFecha, setEnvFecha] = useState("");
+  const [envCopy, setEnvCopy] = useState("");
+  const [envAjuste, setEnvAjuste] = useState("");
+  const [capBusy, setCapBusy] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [envDone, setEnvDone] = useState(false);
   const currentIndex = steps.findIndex((step) => step.id === stage);
   const projectTitle = useMemo(() => idea.trim() ? idea.trim().split(/\s+/).slice(0, 6).join(" ") : "Nuevo creativo", [idea]);
   const goal = analysis?.objective_guess ?? "orders";
   const headlineLength = creativePlan?.headline?.length ?? 0;
   const headlineClass = headlineLength > 55 ? "very-long" : headlineLength > 32 ? "long" : "short";
+  const envInput = { background: "#121517", border: "1px solid #343a3c", borderRadius: 9, color: "#f5f6f1", fontSize: 12.5, padding: "9px 11px", fontFamily: "inherit" } as const;
 
   useEffect(() => {
     const existingId = new URLSearchParams(window.location.search).get("project");
@@ -178,6 +187,24 @@ export default function Home() {
     else { setCreativePlan(result.plan); setCorrectionRequest(""); setNotice("Plan corregido. Revísalo otra vez antes de aprobar."); }
   }
 
+  async function generarCaptionProyecto(ajuste = "") {
+    if (!projectId) return;
+    setCapBusy(true); setNotice("");
+    const r = await fetch("/api/redes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "caption_proyecto", projectId, negocio: "printoria", red: envRed, instruccion: ajuste, copyActual: envCopy }) }).then((x) => x.json());
+    setCapBusy(false);
+    if (r.copy) { setEnvCopy(r.copy); setEnvAjuste(""); }
+    else setNotice(r.error ?? "No se pudo generar la descripción.");
+  }
+
+  async function enviarAPublicaciones() {
+    if (!projectId) return;
+    setEnviando(true); setNotice("");
+    const r = await fetch("/api/redes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "desde_proyecto", projectId, negocio: "printoria", red: envRed, tipo: envTipo, copy: envCopy, fecha: envFecha || null }) }).then((x) => x.json());
+    setEnviando(false);
+    if (r.ok) setEnvDone(true);
+    else setNotice(r.error ?? "No se pudo enviar a Publicaciones.");
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -190,6 +217,7 @@ export default function Home() {
           <Link className="nav-item" href="/projects"><span>▦</span> Mis proyectos</Link>
           <Link className="nav-item" href="/redes"><span>◎</span> Publicaciones</Link>
           <Link className="nav-item" href="/calendario"><span>◫</span> Calendario</Link>
+          <Link className="nav-item" href="/archivo"><span>▤</span> Biblioteca pub.</Link>
           <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
         </nav>
         <div className="sidebar-status">
@@ -259,7 +287,27 @@ export default function Home() {
           )}
 
           {stage === "approved" && (
-            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p><div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); }} type="button">Crear otro proyecto</button></div></section>
+            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p>
+
+            <div className="plan-correction" style={{ marginTop: 24, textAlign: "left" }}>
+              <label className="field-label">Enviar a Publicaciones</label>
+              <p>Genero la descripción con tu voz de marca. Puedes regenerarla, pedir un ajuste puntual o editarla a mano. Elige red y, si quieres, fecha para programar.</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <select value={envRed} onChange={(e) => setEnvRed(e.target.value)} style={envInput}><option value="ig">Instagram</option><option value="fb">Facebook</option><option value="tiktok">TikTok</option></select>
+                <select value={envTipo} onChange={(e) => setEnvTipo(e.target.value)} style={envInput}><option value="post">Post</option><option value="reel">Reel</option></select>
+                <input type="datetime-local" value={envFecha} onChange={(e) => setEnvFecha(e.target.value)} style={envInput} />
+                <button className="secondary-button" disabled={capBusy} onClick={() => generarCaptionProyecto("")} type="button">{capBusy ? "Generando…" : "✨ Generar descripción"}</button>
+              </div>
+              <textarea value={envCopy} onChange={(e) => setEnvCopy(e.target.value)} placeholder="La descripción aparece aquí (dale a Generar) y la puedes editar a mano." style={{ minHeight: 120 }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <input type="text" value={envAjuste} onChange={(e) => setEnvAjuste(e.target.value)} placeholder="Ajuste puntual (ej: más corto, sin precio, más antojo)" style={{ ...envInput, flex: "1 1 240px" }} />
+                <button className="secondary-button" disabled={capBusy || envAjuste.trim().length < 3} onClick={() => generarCaptionProyecto(envAjuste)} type="button">{capBusy ? "Ajustando…" : "↻ Ajustar"}</button>
+              </div>
+              <button className="primary-button" style={{ marginTop: 14 }} disabled={enviando || !envCopy.trim()} onClick={enviarAPublicaciones} type="button">{enviando ? "Enviando…" : envFecha ? "Enviar y programar" : "Enviar a Publicaciones"} <span>→</span></button>
+              {envDone && <p className="form-notice" style={{ marginTop: 12, background: "rgba(150,214,41,.1)", borderColor: "rgba(150,214,41,.25)", color: "#c5f169" }}>✓ Enviado a Publicaciones{envFecha ? " y programado" : " (queda Listo para programar)"}. Míralo en Publicaciones o Calendario.</p>}
+            </div>
+
+            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>

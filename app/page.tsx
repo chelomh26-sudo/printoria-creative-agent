@@ -188,6 +188,7 @@ export default function Home() {
         <nav className="side-nav" aria-label="Navegación principal">
           <Link className="nav-item active" href="/"><span>✦</span> Nuevo creativo</Link>
           <Link className="nav-item" href="/projects"><span>▦</span> Mis proyectos</Link>
+          <Link className="nav-item" href="/redes"><span>◎</span> Publicaciones</Link>
           <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
         </nav>
         <div className="sidebar-status">

@@ -247,9 +247,28 @@ export async function GET(request: Request) {
       }
       return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, sourceAssetUrl, imageModel: generatedAsset?.metadata?.model ?? null });
     }
-    const { data, error } = await supabase.from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
+    const { data: projectRows, error } = await supabase.from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
     if (error) throw error;
-    return NextResponse.json({ projects: data ?? [] });
+    const projectIds = (projectRows ?? []).map((p) => p.id);
+    const byProject: Record<string, { source: string | null; generated: string | null }> = {};
+    if (projectIds.length) {
+      const { data: assetRows } = await supabase.from("creative_assets").select("project_id,asset_role,storage_path,created_at").in("project_id", projectIds).order("created_at", { ascending: true });
+      const paths = Array.from(new Set((assetRows ?? []).map((a) => a.storage_path)));
+      const signedByPath: Record<string, string> = {};
+      if (paths.length) {
+        const { data: signedList } = await supabase.storage.from("creative-assets").createSignedUrls(paths, 3600);
+        for (const s of signedList ?? []) if (s.path && s.signedUrl) signedByPath[s.path] = s.signedUrl;
+      }
+      for (const a of assetRows ?? []) {
+        const url = signedByPath[a.storage_path];
+        if (!url) continue;
+        (byProject[a.project_id] ||= { source: null, generated: null });
+        if (a.asset_role === "generated") byProject[a.project_id].generated = url;
+        else if (!byProject[a.project_id].source) byProject[a.project_id].source = url;
+      }
+    }
+    const projects = (projectRows ?? []).map((p) => ({ ...p, sourceUrl: byProject[p.id]?.source ?? null, imageUrl: byProject[p.id]?.generated ?? null }));
+    return NextResponse.json({ projects });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Error al cargar proyectos." }, { status: 500 });
   }

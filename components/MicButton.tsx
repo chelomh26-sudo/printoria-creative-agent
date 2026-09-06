@@ -1,29 +1,37 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function MicButton({ onText, title = "Dictar por voz" }: { onText: (t: string) => void; title?: string }) {
   const [on, setOn] = useState(false);
   const recRef = useRef<any>(null);
+  const onRef = useRef(false);
 
-  const toggle = () => {
+  const start = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { alert("Tu navegador no soporta dictado por voz. Usa Google Chrome."); return; }
-    if (on && recRef.current) { recRef.current.stop(); return; }
+    if (!SR) { alert("Tu navegador no soporta dictado por voz. Usa Google Chrome."); onRef.current = false; setOn(false); return; }
     const rec = new SR();
     rec.lang = "es-MX";
     rec.interimResults = false;
-    rec.continuous = false;
+    rec.continuous = true;
     rec.onresult = (e: any) => {
-      const t = Array.from(e.results).map((r: any) => r[0].transcript).join(" ").trim();
-      if (t) onText(t);
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) { const t = String(r[0].transcript).trim(); if (t) onText(t); }
+      }
     };
-    rec.onend = () => setOn(false);
-    rec.onerror = () => setOn(false);
+    rec.onend = () => { if (onRef.current) { try { rec.start(); } catch { /* reintento */ } } else setOn(false); };
+    rec.onerror = (ev: any) => { if (ev && (ev.error === "no-speech" || ev.error === "aborted")) return; onRef.current = false; setOn(false); };
     recRef.current = rec;
-    setOn(true);
-    rec.start();
+    try { rec.start(); } catch { /* ya iniciado */ }
   };
+
+  const toggle = () => {
+    if (on) { onRef.current = false; setOn(false); try { recRef.current && recRef.current.stop(); } catch { /* noop */ } }
+    else { onRef.current = true; setOn(true); start(); }
+  };
+
+  useEffect(() => () => { onRef.current = false; try { recRef.current && recRef.current.stop(); } catch { /* noop */ } }, []);
 
   return (
     <button type="button" onClick={toggle} title={title} aria-label={title}

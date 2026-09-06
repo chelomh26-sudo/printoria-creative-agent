@@ -220,6 +220,7 @@ export default function Home() {
           <Link className="nav-item" href="/calendario"><span>◫</span> Calendario</Link>
           <Link className="nav-item" href="/archivo"><span>▤</span> Biblioteca pub.</Link>
           <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
+          <Link className="nav-item" href="/settings"><span>⚙</span> Ajustes</Link>
         </nav>
         <div className="sidebar-status">
           <div className="status-row"><span>Plan real · v0.3</span><span className="status-pill">Activo</span></div>

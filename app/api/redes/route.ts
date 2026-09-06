@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { loadPrompts } from "../../../lib/prompts";
 
 export const maxDuration = 60;
 const SUPA_URL = "https://sjstuvixonakpjezkmpk.supabase.co";
@@ -12,12 +13,6 @@ function adminClient() {
 }
 type SB = ReturnType<typeof adminClient>;
 
-const VOZ: Record<string, string> = {
-  marikekas:
-    "Marikekas: fonda de quesadillas en Ciudad Victoria, Tamaulipas, desde 1995 (fundada por Dona Marcia). Producto estrella: 'kekas' = quesadillas fritas tipo empanada (tambien suaves), en tortilla de harina, maiz blanco, rojo y azul. Eslogan: 'Quesadillas con y sin queso'. Voz: calida, de barrio, con antojo, cercana y familiar. Maximo 2 emojis. Publico: senoras 40+, familias, estudiantes, trabajadores.",
-  printoria:
-    "Printoria 3D Studio: negocio de impresion 3D en Ciudad Victoria. NO vende 'impresion 3D', vende productos utiles y personalizados. Voz: clara, comercial, cercana y creativa; vende el beneficio, no la funcion. Sin inventar precios ni datos.",
-};
 
 async function productContext(supabase: SB, negocio: string): Promise<string> {
   if (negocio !== "printoria") {
@@ -59,8 +54,8 @@ const ANALYZE_SCHEMA = {
   required: ["tema", "questions"], additionalProperties: false,
 } as const;
 
-async function analizar(negocio: string, red: string, nota: string, imageUrl: string | null, ctx: string) {
-  const sys = `Eres el social media manager de ${VOZ[negocio] || VOZ.marikekas}\n\n${ctx}\n\nVas a preparar un post para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"}. Mira la imagen (si hay) y detecta de que se trata. Devuelve un 'tema' corto (3-6 palabras) y de 2 a 4 preguntas rapidas para afinar la descripcion (que producto/antojo es, beneficio o gancho, y llamado a la accion). Cada pregunta con 3-4 opciones concretas basadas en lo que ves; incluye 'Otro'. No inventes precios ni datos.`;
+async function analizar(negocio: string, red: string, nota: string, imageUrl: string | null, ctx: string, voz: string, reglas: string) {
+  const sys = `Eres el social media manager de ${voz}\n\n${ctx}\n\nVas a preparar un post para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"}. Mira la imagen (si hay) y detecta de que se trata. ${reglas}`;
   const userContent: Array<Record<string, unknown>> = [{ type: "text", text: `Negocio: ${negocio}. Nota del usuario: ${nota || "(ninguna)"}` }];
   if (imageUrl) userContent.push({ type: "image_url", image_url: { url: imageUrl } });
   const p = await orFetch({
@@ -72,8 +67,8 @@ async function analizar(negocio: string, red: string, nota: string, imageUrl: st
   return JSON.parse(p.choices[0].message.content);
 }
 
-async function describir(negocio: string, red: string, tema: string, answers: Record<string, string>, ctx: string, instruccion = "", copyActual = "") {
-  const sys = `Eres el social media manager de ${VOZ[negocio] || VOZ.marikekas}\n\n${ctx}\n\nEscribe la descripcion (caption) para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"} en espanol mexicano, con la voz de marca, 1-2 emojis, y 8-12 hashtags locales de Ciudad Victoria al final. Corto y con antojo/beneficio. No inventes precios ni datos. Devuelve SOLO el caption.`;
+async function describir(negocio: string, red: string, tema: string, answers: Record<string, string>, ctx: string, voz: string, reglas: string, instruccion = "", copyActual = "") {
+  const sys = `Eres el social media manager de ${voz}\n\n${ctx}\n\nRed: ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"}. ${reglas}`;
   const p = await orFetch({
     model: model(),
     messages: [{ role: "system", content: sys }, { role: "user", content: instruccion ? `Tema: ${tema}\nRespuestas: ${JSON.stringify(answers)}\n\nCaption actual:\n${copyActual}\n\nAjuste solicitado: ${instruccion}\nReescribe el caption aplicando el ajuste.` : `Tema: ${tema}\nRespuestas: ${JSON.stringify(answers)}` }],
@@ -82,8 +77,8 @@ async function describir(negocio: string, red: string, tema: string, answers: Re
   return String(p.choices[0].message.content ?? "").trim();
 }
 
-async function captionProyecto(negocio: string, red: string, base: string, instruccion: string, copyActual: string, ctx: string) {
-  const sys = `Eres el social media manager de ${VOZ[negocio] || VOZ.printoria}\n\n${ctx}\n\nEscribe la descripcion (caption) para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"} en espanol mexicano, con la voz de marca, 1-2 emojis, y 8-12 hashtags locales de Ciudad Victoria al final. Corto y con antojo/beneficio. No inventes precios ni datos. Devuelve SOLO el caption.`;
+async function captionProyecto(voz: string, red: string, base: string, instruccion: string, copyActual: string, ctx: string, reglas: string) {
+  const sys = `Eres el social media manager de ${voz}\n\n${ctx}\n\nRed: ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"}. ${reglas}`;
   const user = instruccion
     ? `Anuncio: ${base}\n\nCaption actual:\n${copyActual}\n\nAjuste solicitado: ${instruccion}\nReescribe el caption aplicando el ajuste.`
     : `Anuncio: ${base}\n\nEscribe el caption.`;
@@ -105,6 +100,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const supabase = adminClient();
+    const P = await loadPrompts(supabase);
+    const vozDe = (n: string) => (n === "printoria" ? P.voz_printoria : P.voz_marikekas);
     const ctype = request.headers.get("content-type") || "";
     if (ctype.includes("multipart/form-data")) {
       const form = await request.formData();
@@ -124,7 +121,7 @@ export async function POST(request: Request) {
         asset_url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
       }
       const ctx = await productContext(supabase, negocio);
-      const ai = await analizar(negocio, red, nota, esImagen ? asset_url : null, ctx);
+      const ai = await analizar(negocio, red, nota, esImagen ? asset_url : null, ctx, vozDe(negocio), P.redes_preguntas);
       const { data: row, error } = await supabase.from("contenido").insert({ negocio, red, tipo, tema: ai.tema, asset_url, estado: "proceso" }).select("*").single();
       if (error) throw error;
       return NextResponse.json({ id: row.id, tema: ai.tema, questions: ai.questions, asset_url });
@@ -135,7 +132,7 @@ export async function POST(request: Request) {
       const plan = (proj?.creative_plan || {}) as Record<string, unknown>;
       const base = `Producto/idea: ${proj?.idea || proj?.title || ""}. Concepto: ${plan.concept || ""}. Headline: ${plan.headline || ""}. Beneficio: ${plan.subheadline || ""}. CTA: ${plan.cta || ""}.`;
       const ctx = await productContext(supabase, body.negocio || "printoria");
-      const copy = await captionProyecto(body.negocio || "printoria", body.red || "ig", base, body.instruccion || "", body.copyActual || "", ctx);
+      const copy = await captionProyecto(vozDe(body.negocio || "printoria"), body.red || "ig", base, body.instruccion || "", body.copyActual || "", ctx, P.redes_descripcion);
       return NextResponse.json({ ok: true, copy });
     }
     if (body.action === "desde_proyecto") {
@@ -162,7 +159,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "describir") {
       const ctx = await productContext(supabase, body.negocio || "marikekas");
-      const copy = await describir(body.negocio || "marikekas", body.red || "ig", body.tema || "", body.answers || {}, ctx, body.instruccion || "", body.copyActual || "");
+      const copy = await describir(body.negocio || "marikekas", body.red || "ig", body.tema || "", body.answers || {}, ctx, vozDe(body.negocio || "marikekas"), P.redes_descripcion, body.instruccion || "", body.copyActual || "");
       const { error } = await supabase.from("contenido").update({ copy, estado: "listo" }).eq("id", body.id);
       if (error) throw error;
       return NextResponse.json({ ok: true, copy });

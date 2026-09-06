@@ -68,11 +68,15 @@ const PLAN_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; brandContext: string; marketing: string; design: string }) {
+async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; brandContext: string; marketing: string; design: string; sistema: string }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
-  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Convierte el análisis y las respuestas aprobadas en un plan visual ejecutable para Instagram/Facebook Feed 4:5, 1080 × 1350. No generes imagen todavía. Debes tomar decisiones explícitas de dirección de arte: jerarquía, encuadre, escala del producto, escenario, iluminación, profundidad, ubicación del logo, densidad de texto y CTA. No inventes precios, descuentos, materiales, compatibilidad, tiempos ni funciones. El producto real debe ser protagonista. Todo LOCKED ASSET se preserva sin regenerar, reinterpretar, cambiar texto, nombres, cantidades, color, forma o detalles. Los REFERENCE ASSETS sólo inspiran estilo y composición; nunca sustituyen al producto real. Incluye siempre el logo oficial cuando haya uno disponible. La IA sólo puede crear fondo, iluminación, ambiente y elementos decorativos que no alteren el producto. El copy debe ser español mexicano, claro y comercial. REGLA DE COPY: headline de 2 a 6 palabras (máximo absoluto 8), subheadline de máximo 12 palabras y CTA de máximo 4 palabras. El beneficio debe ser directo; no conviertas una explicación en titular. Un solo CTA. Identidad Printoria: verde #96D629, negro #0B0B0B, carbón #202428, blanco #E1E0E0 y gris #555452. Devuelve un único plan, no alternativas.\n\n${input.marketing}\n\n${input.design}`;
+  const system = `${input.sistema}
+
+${input.marketing}
+
+${input.design}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -91,11 +95,15 @@ async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown
   return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
 }
 
-async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; plan: unknown; correction: string; brandContext: string; marketing: string; design: string }) {
+async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; plan: unknown; correction: string; brandContext: string; marketing: string; design: string; sistema: string }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
-  const system = `Eres el Director Creativo senior de Printoria 3D Studio. Corrige un plan creativo existente siguiendo exactamente la solicitud del usuario. No generes imagen. Conserva todo lo que el usuario no pidió cambiar. No inventes información comercial. Mantén las reglas LOCKED/REFERENCE, la identidad de marca y el formato 4:5. El headline debe tener de 2 a 6 palabras (máximo absoluto 8), el subheadline máximo 12 palabras y el CTA máximo 4 palabras, incluso si estás corrigiendo otra parte del plan. Devuelve el plan completo corregido usando el esquema solicitado.\n\n${input.marketing}\n\n${input.design}`;
+  const system = `${input.sistema}
+
+${input.marketing}
+
+${input.design}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -108,7 +116,7 @@ async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown
   return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
 }
 
-async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[], brandContext: string, brandVisuals: { name: string; url: string }[], marketing: string, design: string) {
+async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[], brandContext: string, brandVisuals: { name: string; url: string }[], marketing: string, design: string, analista: string) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const imageParts: Array<Record<string, unknown>> = [];
@@ -120,7 +128,11 @@ async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[
     imageParts.push({ type: "text", text: `REFERENCIA VISUAL APROBADA DE LA BIBLIOTECA: ${visual.name}. Analiza su jerarquía, escena, escala, iluminación y relación texto-producto.` });
     imageParts.push({ type: "image_url", image_url: { url: visual.url } });
   }
-  const system = `Eres el Director Creativo y Analista Multimodal de Printoria 3D Studio, negocio local de Ciudad Victoria, Tamaulipas. Analiza antes de crear. Nunca generes una imagen en esta fase. Nunca inventes precio, material, promoción, función, compatibilidad, disponibilidad ni tiempo de entrega. Distingue hechos visibles, datos proporcionados e hipótesis. Si una foto es producto real o pedido real, trátala como LOCKED: puede escalarse, rotarse, recortarse y posicionarse, pero no regenerarse ni cambiar textos, nombres, cantidades, colores o detalles. Los REFERENCE ASSETS sólo inspiran dirección visual; no son evidencia del producto. Debes mirar y comparar realmente las referencias visuales adjuntas. Marca: cercana, profesional y creativa; vende beneficios y soluciones. Paleta: #96D629, #E1E0E0, #0B0B0B, #555452, #202428. Produce entre 5 y 8 preguntas específicas. OBLIGATORIO: incluye preguntas con ids visual_reference, scene_and_context, interaction_or_demo y message_angle. Pregunta qué referencia desea seguir y con qué grado de fidelidad; qué escenario/contexto debe verse; qué interacción demostrará el uso; y qué recompensa/beneficio debe dominar el headline. Si por la fotografía no resulta evidente qué es el producto o cómo funciona, la pregunta interaction_or_demo debe confirmar exactamente cómo hacerlo comprensible en dos segundos. Las opciones deben describir decisiones concretas basadas en este producto y las referencias observadas, no opciones genéricas. También pregunta uso de logo/mascota si no está claro. No preguntes algo ya respondido. Para single_choice y multiple_choice ofrece opciones concretas e incluye 'Otro' cuando tenga sentido. Usa free_text sólo si una lista cerrada no basta.\n\n${marketing}\n\n${design}`;
+  const system = `${analista}
+
+${marketing}
+
+${design}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -139,26 +151,19 @@ async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[
   return { analysis: JSON.parse(content), usage: payload.usage ?? {}, generationId: payload.id ?? null, model: payload.model ?? "openai/gpt-4.1-mini" };
 }
 
-function imagePrompt(plan: Record<string, unknown>, design: string) {
+function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string) {
   const list = (value: unknown) => Array.isArray(value) ? value.join("; ") : String(value ?? "");
-  return `Diseña una pieza publicitaria premium terminada para Instagram/Facebook Feed, relación 4:5, para Printoria 3D Studio. Debe parecer trabajo de un director de arte profesional, no una plantilla automática.
-
-CONCEPTO: ${String(plan.concept ?? "")}
-ESCENARIO: ${String(plan.scene ?? "")}
-COMPOSICIÓN: ${list(plan.visual_composition)}
-PRODUCTO PROTAGONISTA: ${String(plan.hero_asset ?? "producto real de la imagen de referencia")}
-HEADLINE EXACTO: ${String(plan.headline ?? "")}
-SUBHEADLINE EXACTO: ${String(plan.subheadline ?? "")}
-CTA EXACTO: ${String(plan.cta ?? "")}
-REFERENCIAS UTILIZADAS: ${list(plan.references_used)}
-
-Dirección visual: fotografía publicitaria limpia, moderna, profesional y comercial; jerarquía clara; producto protagonista; iluminación de estudio; alto contraste; espacio negativo; diseño listo para Meta Ads. Identidad visual: negro y carbón dominantes, acentos verde lima brillante, blanco y gris neutro. Incluye el logo oficial de Printoria visible y con respiración, sin redibujarlo ni alterar texto, proporciones o colores. IMPORTANTE: los nombres y códigos de colores son instrucciones internas; jamás los escribas dentro del anuncio. No muestres códigos HEX, nombres de colores, guías, retículas, etiquetas técnicas ni texto de relleno. Usa solamente el headline, subheadline y CTA indicados arriba, perfectamente legibles y bien escritos. No inventes precios, descuentos, promociones, materiales, funciones ni datos.
-
-PRUEBA OBLIGATORIA DE COMPRENSIÓN: al ver la pieza durante dos segundos debe quedar claro qué objeto se vende, cómo se usa y qué resultado produce. No permitas que una mano, un teléfono, el fondo o el texto oculten el producto. Si el producto es tecnológico o su mecanismo no es visible, representa la interacción de forma inequívoca y usa el subheadline para nombrar la categoría y explicar la acción.
-
-${design}
-
-Las imágenes adjuntas son referencias reales del producto. Mantén al máximo su identidad visual, forma, color, conectores, letras, cantidades y detalles. No agregues productos inexistentes ni cambies nombres. Restricciones adicionales: ${list(plan.restrictions)}.`;
+  return tpl
+    .replaceAll("{{concept}}", String(plan.concept ?? ""))
+    .replaceAll("{{scene}}", String(plan.scene ?? ""))
+    .replaceAll("{{composicion}}", list(plan.visual_composition))
+    .replaceAll("{{hero}}", String(plan.hero_asset ?? "producto real de la imagen de referencia"))
+    .replaceAll("{{headline}}", String(plan.headline ?? ""))
+    .replaceAll("{{subheadline}}", String(plan.subheadline ?? ""))
+    .replaceAll("{{cta}}", String(plan.cta ?? ""))
+    .replaceAll("{{referencias}}", list(plan.references_used))
+    .replaceAll("{{restricciones}}", list(plan.restrictions))
+    .replaceAll("{{design}}", design);
 }
 
 async function generateImageWithOpenRouter(prompt: string, references: string[]) {
@@ -285,7 +290,7 @@ export async function POST(request: Request) {
       const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
       if (signed.data?.signedUrl) brandVisuals.push({ name: asset.name, url: signed.data.signedUrl });
     }
-    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals, P.img_marketing, P.img_design);
+    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals, P.img_marketing, P.img_design, P.img_analista);
     await supabase.from("creative_generations").insert({
       project_id: project.id,
       kind: "analysis",
@@ -315,7 +320,7 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design });
+      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_director });
       const { error } = await supabase.from("creative_projects").update({ form_answers: body.answers, objective: ai.plan.objective, creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -329,7 +334,7 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design });
+      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_revisor });
       const { error } = await supabase.from("creative_projects").update({ creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -346,7 +351,7 @@ export async function PATCH(request: Request) {
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: body.plan, approved: true }, { onConflict: "project_id" });
       if (brief.error) throw brief.error;
-      const prompt = imagePrompt(body.plan ?? {}, P.img_design);
+      const prompt = imagePrompt(body.plan ?? {}, P.img_design, P.img_generacion);
       const { data: generation, error: generationError } = await supabase.from("creative_generations").insert({ project_id: body.projectId, kind: "image", provider: "openrouter", model: IMAGE_MODEL, status: "running", prompt_text: prompt }).select("id").single();
       if (generationError || !generation) throw generationError ?? new Error("No se registró la generación.");
       try {

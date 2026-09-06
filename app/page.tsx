@@ -3,6 +3,7 @@
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { MicButton } from "../components/MicButton";
 
 type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
@@ -246,6 +247,7 @@ export default function Home() {
               <div className="panel-heading"><span className="section-kicker">FASE 1</span><h2>¿Qué quieres crear?</h2><p>Explícamelo como lo harías normalmente. El director analizará tu idea y tus fotografías antes de proponer algo.</p></div>
               <label className="field-label" htmlFor="idea">Tu idea o producto</label>
               <textarea id="idea" onChange={(event) => setIdea(event.target.value)} placeholder="Ejemplo: Quiero anunciar este producto para guardar cables. Se puede personalizar y quiero conseguir pedidos por WhatsApp..." value={idea} />
+              <div style={{ marginTop: 8 }}><MicButton onText={(t) => setIdea((v) => v ? v + " " + t : t)} title="Dictar la idea" /></div>
               <div className="text-meta"><span>Escribe con tus propias palabras</span><span>{idea.length} caracteres</span></div>
               <div className="asset-section">
                 <div><label className="field-label" htmlFor="assets">Fotografías y referencias</label><p className="field-help">Producto real, pedido real, logo, mascota o referencia visual.</p></div>
@@ -299,6 +301,7 @@ export default function Home() {
                 <button className="secondary-button" disabled={capBusy} onClick={() => generarCaptionProyecto("")} type="button">{capBusy ? "Generando…" : "✨ Generar descripción"}</button>
               </div>
               <textarea value={envCopy} onChange={(e) => setEnvCopy(e.target.value)} placeholder="La descripción aparece aquí (dale a Generar) y la puedes editar a mano." style={{ minHeight: 120 }} />
+              <div style={{ marginTop: 8 }}><MicButton onText={(t) => setEnvCopy((v) => v ? v + " " + t : t)} title="Dictar la descripción" /></div>
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <input type="text" value={envAjuste} onChange={(e) => setEnvAjuste(e.target.value)} placeholder="Ajuste puntual (ej: más corto, sin precio, más antojo)" style={{ ...envInput, flex: "1 1 240px" }} />
                 <button className="secondary-button" disabled={capBusy || envAjuste.trim().length < 3} onClick={() => generarCaptionProyecto(envAjuste)} type="button">{capBusy ? "Ajustando…" : "↻ Ajustar"}</button>

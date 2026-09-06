@@ -72,11 +72,11 @@ async function analizar(negocio: string, red: string, nota: string, imageUrl: st
   return JSON.parse(p.choices[0].message.content);
 }
 
-async function describir(negocio: string, red: string, tema: string, answers: Record<string, string>, ctx: string) {
+async function describir(negocio: string, red: string, tema: string, answers: Record<string, string>, ctx: string, instruccion = "", copyActual = "") {
   const sys = `Eres el social media manager de ${VOZ[negocio] || VOZ.marikekas}\n\n${ctx}\n\nEscribe la descripcion (caption) para ${red === "fb" ? "Facebook" : red === "tiktok" ? "TikTok" : "Instagram"} en espanol mexicano, con la voz de marca, 1-2 emojis, y 8-12 hashtags locales de Ciudad Victoria al final. Corto y con antojo/beneficio. No inventes precios ni datos. Devuelve SOLO el caption.`;
   const p = await orFetch({
     model: model(),
-    messages: [{ role: "system", content: sys }, { role: "user", content: `Tema: ${tema}\nRespuestas: ${JSON.stringify(answers)}` }],
+    messages: [{ role: "system", content: sys }, { role: "user", content: instruccion ? `Tema: ${tema}\nRespuestas: ${JSON.stringify(answers)}\n\nCaption actual:\n${copyActual}\n\nAjuste solicitado: ${instruccion}\nReescribe el caption aplicando el ajuste.` : `Tema: ${tema}\nRespuestas: ${JSON.stringify(answers)}` }],
     temperature: 0.7,
   });
   return String(p.choices[0].message.content ?? "").trim();
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "describir") {
       const ctx = await productContext(supabase, body.negocio || "marikekas");
-      const copy = await describir(body.negocio || "marikekas", body.red || "ig", body.tema || "", body.answers || {}, ctx);
+      const copy = await describir(body.negocio || "marikekas", body.red || "ig", body.tema || "", body.answers || {}, ctx, body.instruccion || "", body.copyActual || "");
       const { error } = await supabase.from("contenido").update({ copy, estado: "listo" }).eq("id", body.id);
       if (error) throw error;
       return NextResponse.json({ ok: true, copy });

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceShell } from "../../components/WorkspaceShell";
+import { MicButton } from "../../components/MicButton";
 
 type Item = { id: string | number; negocio: string; red: string; tipo: string; tema: string; copy?: string | null; estado: string; fecha?: string | null; asset_url?: string | null; link?: string | null };
 type Q = { id: string; question: string; options: string[] };
@@ -98,6 +99,7 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   const [questions, setQuestions] = useState<Q[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [copy, setCopy] = useState("");
+  const [ajuste, setAjuste] = useState("");
   const [fecha, setFecha] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -114,12 +116,12 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
       setId(r.id); setTema(r.tema); setQuestions(r.questions || []); setStep(2);
     } catch (e) { setErr(e instanceof Error ? e.message : "Error al analizar"); } finally { setBusy(false); }
   };
-  const generar = async () => {
+  const generar = async (instruccion = "") => {
     setErr(""); setBusy(true);
     try {
-      const r = await fetch("/api/redes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "describir", id, negocio: neg, red, tema, answers }) }).then((x) => x.json());
+      const r = await fetch("/api/redes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "describir", id, negocio: neg, red, tema, answers, instruccion, copyActual: copy }) }).then((x) => x.json());
       if (r.error) throw new Error(r.error);
-      setCopy(r.copy || ""); setStep(3);
+      setCopy(r.copy || ""); setStep(3); setAjuste("");
     } catch (e) { setErr(e instanceof Error ? e.message : "Error al generar"); } finally { setBusy(false); }
   };
   const confirmar = async () => {
@@ -150,13 +152,13 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
               <div><span style={lab}>Red</span><select value={red} onChange={(e) => setRed(e.target.value)} style={inp}><option value="ig">Instagram</option><option value="fb">Facebook</option><option value="tiktok">TikTok</option></select></div>
               <div><span style={lab}>Tipo</span><select value={tipo} onChange={(e) => setTipo(e.target.value)} style={inp}><option value="post">Post</option><option value="reel">Reel</option></select></div>
             </div>
-            <span style={lab}>Foto o video</span>
+            <span style={lab}>Foto o video (opcional)</span>
             <div onClick={() => fileRef.current?.click()} style={{ border: "1px dashed #48524f", borderRadius: 14, padding: 22, textAlign: "center", color: "#8a9296", fontSize: 13, cursor: "pointer", background: "#0f1214" }}>
               {file ? `✓ ${file.name}` : "📸 Haz clic para subir foto/video"}
             </div>
             <input ref={fileRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={(e) => pickFile(e.target.files?.[0] || null)} />
             {preview && <img src={preview} alt="" style={{ width: 92, height: 112, objectFit: "cover", borderRadius: 10, marginTop: 12 }} />}
-            <div style={{ marginTop: 14 }}><span style={lab}>Nota rapida (opcional)</span><input type="text" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej: promo de la semana, sabor nuevo…" style={{ ...inp, width: "100%" }} /></div>
+            <div style={{ marginTop: 14 }}><span style={lab}>De qué se trata (escríbelo o dícta​lo)</span><input type="text" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej: promo de la semana, sabor nuevo…" style={{ ...inp, width: "100%" }} /><div style={{ marginTop: 8 }}><MicButton onText={(t) => setNota((v) => v ? v + " " + t : t)} title="Dictar el tema" /></div></div>
           </>)}
 
           {step === 2 && (<>
@@ -177,7 +179,14 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           {step === 3 && (<>
             <span style={lab}>Descripcion (puedes editarla)</span>
             <textarea value={copy} onChange={(e) => setCopy(e.target.value)} style={{ ...inp, width: "100%", minHeight: 150, resize: "vertical", lineHeight: 1.5 }} />
-            <button style={{ ...btn, marginTop: 10 }} disabled={busy} onClick={generar}>{busy ? "…" : "↻ Regenerar"}</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button style={btn} disabled={busy} onClick={() => generar()}>{busy ? "…" : "↻ Regenerar"}</button>
+              <MicButton onText={(t) => setCopy((v) => v ? v + " " + t : t)} title="Dictar la descripción" />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <input type="text" value={ajuste} onChange={(e) => setAjuste(e.target.value)} placeholder="Ajuste puntual (ej: más corto, sin precio, más antojo)" style={{ ...inp, flex: "1 1 220px" }} />
+              <button style={btn} disabled={busy || ajuste.trim().length < 3} onClick={() => generar(ajuste)}>↻ Ajustar</button>
+            </div>
           </>)}
 
           {step === 4 && (<>
@@ -193,7 +202,7 @@ function NuevoPost({ onClose, onDone }: { onClose: () => void; onDone: () => voi
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "16px 22px", borderTop: "1px solid rgba(255,255,255,.1)", marginTop: 14 }}>
           <button onClick={() => step > 1 ? setStep(step - 1) : onClose()} style={{ background: "transparent", border: "none", color: "#8a9296", fontSize: 12, cursor: "pointer" }}>{step > 1 ? "‹ Atras" : "Cancelar"}</button>
           {step === 1 && <button style={busy ? { ...btnP, opacity: .6 } : btnP} disabled={busy} onClick={analizar}>{busy ? "Analizando…" : "Analizar ›"}</button>}
-          {step === 2 && <button style={busy ? { ...btnP, opacity: .6 } : btnP} disabled={busy} onClick={generar}>{busy ? "Escribiendo…" : "Generar descripcion ›"}</button>}
+          {step === 2 && <button style={busy ? { ...btnP, opacity: .6 } : btnP} disabled={busy} onClick={() => generar()}>{busy ? "Escribiendo…" : "Generar descripcion ›"}</button>}
           {step === 3 && <button style={btnP} onClick={() => setStep(4)}>Continuar ›</button>}
           {step === 4 && <button style={busy ? { ...btnP, opacity: .6 } : btnP} disabled={busy || !fecha} onClick={confirmar}>{busy ? "…" : "✓ Confirmar y programar"}</button>}
         </div>

@@ -107,6 +107,34 @@ REGLAS DURAS:
 
 Restricciones adicionales: {{restricciones}}.`;
 
+const MODO_LETRERO = `MODO LETRERO (cartel/letrero para imprimir o mostrar, varias medidas):
+- Es un LETRERO, no un folleto: UNA sola idea/objetivo claro. Nada de llenarlo de info, features ni muchos iconos.
+- Primero clava EL OBJETIVO: que quieres que la persona haga o entienda en 3 segundos (seguir, escanear QR, conocer el negocio, pedir, promo). Todo el diseno sirve a ese objetivo.
+- Tus preguntas deben definir: objetivo unico, mensaje principal en pocas palabras, 1 CTA, y donde se pone (mostrador, pared, punto de venta).
+- Menos es mas: 1 titular fuerte + maximo 1-2 apoyos cortos. Lo demas DECORA y refuerza marca (glow, formas, VIC/logo discretos), no informa de mas.
+- Conserva identidad Printoria y no inventes datos.`;
+
+const IMG_GEN_LETRERO = `Disena un LETRERO / cartel PREMIUM y LIMPIO para Printoria 3D Studio. Un solo objetivo, mucho aire. Debe verse pro, no saturado.
+
+OBJETIVO / CONCEPTO: {{concept}}
+MENSAJE PRINCIPAL (titular): {{headline}}
+APOYO CORTO (opcional): {{subheadline}}
+CTA: {{cta}}
+ESCENARIO / DECORACION: {{scene}}
+COMPOSICION: {{composicion}}
+REFERENCIAS: {{referencias}}
+
+REGLAS DURAS (anti-saturacion):
+- Jerarquia brutal: 1 titular domina la pieza. Maximo 2-3 niveles de texto en total.
+- NADA de listas largas de features, ni bloques de info, ni muchos iconos. Si hay apoyos, maximo 1-2 y cortos.
+- MUCHO espacio negativo y respiro. El vacio es parte del diseno.
+- La decoracion (glow verde, formas simples, VIC o logo) APOYA sin competir ni tapar el mensaje.
+- Identidad: negro/carbon dominante, acento verde #96D629, blanco. Tagline IMPRIMIENDO POSIBILIDADES solo si cabe limpio.
+- Deja zona limpia para QR o logo cuando aplique. Producto real intacto si lo hay.
+- Texto perfectamente legible y bien escrito. No inventes precios ni datos.
+
+Restricciones adicionales: {{restricciones}}.`;
+
 export const PROMPT_DEFAULTS: Record<string, string> = {
   voz_marikekas:
     "Marikekas: fonda de quesadillas en Ciudad Victoria, Tamaulipas, desde 1995 (fundada por Dona Marcia). Producto estrella: 'kekas' = quesadillas fritas tipo empanada (tambien suaves), en tortilla de harina, maiz blanco, rojo y azul. Eslogan: 'Quesadillas con y sin queso'. Voz: calida, de barrio, con antojo, cercana y familiar. Maximo 2 emojis. Publico: senoras 40+, familias, estudiantes, trabajadores.",
@@ -141,6 +169,8 @@ NO inventes precios ni datos. Printoria: cierra con IMPRIMIENDO POSIBILIDADES cu
   modo_historia: MODO_HISTORIA,
   modo_mascota: MODO_MASCOTA,
   modo_elemento: MODO_ELEMENTO,
+  modo_letrero: MODO_LETRERO,
+  img_gen_letrero: IMG_GEN_LETRERO,
 };
 
 export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
@@ -159,6 +189,8 @@ export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
   { key: "img_gen_mascota", label: "Tipos — Mascota (generacion, transparente)", grupo: "Tipos de creativo" },
   { key: "modo_elemento", label: "Tipos — Elemento grafico (modo overlay)", grupo: "Tipos de creativo" },
   { key: "img_gen_elemento", label: "Tipos — Elemento grafico (generacion, transparente)", grupo: "Tipos de creativo" },
+  { key: "modo_letrero", label: "Tipos — Letrero (limpio, objetivo unico)", grupo: "Tipos de creativo" },
+  { key: "img_gen_letrero", label: "Tipos — Letrero (generacion, varias medidas)", grupo: "Tipos de creativo" },
 ];
 
 export async function loadPrompts(supabase: any): Promise<Record<string, string>> {

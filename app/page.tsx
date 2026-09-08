@@ -22,6 +22,7 @@ const TIPOS = [
   { id: "historia", label: "Historia" },
   { id: "mascota", label: "Mascota" },
   { id: "elemento", label: "Elemento grafico" },
+  { id: "letrero", label: "Letrero" },
 ] as const;
 type TipoId = (typeof TIPOS)[number]["id"];
 
@@ -270,11 +271,11 @@ export default function Home() {
                     <button key={t.id} type="button" onClick={() => selectTipo(t.id)} style={{ padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, border: tipo === t.id ? "1px solid #96D629" : "1px solid #343a3c", background: tipo === t.id ? "rgba(150,214,41,.12)" : "#121517", color: tipo === t.id ? "#c5f169" : "#f5f6f1" }}>{t.label}</button>
                   ))}
                 </div>
-                {(tipo === "anuncio" || tipo === "elemento") ? (
+                {(tipo === "anuncio" || tipo === "elemento" || tipo === "letrero") ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: "#9aa0a2" }}>Formato:</span>
                     <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ background: "#121517", border: "1px solid #343a3c", borderRadius: 9, color: "#f5f6f1", fontSize: 12.5, padding: "8px 11px", fontFamily: "inherit" }}>
-                      {(tipo === "anuncio" ? ["4:5", "1:1", "9:16"] : ["9:16", "1:1"]).map((f) => <option key={f} value={f}>{f}</option>)}
+                      {(tipo === "anuncio" ? ["4:5", "1:1", "9:16"] : tipo === "letrero" ? ["4:5", "3:4", "1:1", "4:3", "9:16"] : ["9:16", "1:1"]).map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
                     {tipo === "elemento" && <span style={{ fontSize: 12, color: "#9aa0a2" }}>fondo transparente</span>}
                   </div>

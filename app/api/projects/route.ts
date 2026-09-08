@@ -7,6 +7,26 @@ export const maxDuration = 120;
 const IMAGE_MODEL = "openai/gpt-image-2";
 const IMAGE_ESTIMATED_COST_USD = 0.13;
 
+function modoFor(tipo: string, P: Record<string, string>): string {
+  if (tipo === "historia") return P.modo_historia ?? "";
+  if (tipo === "mascota") return P.modo_mascota ?? "";
+  if (tipo === "elemento") return P.modo_elemento ?? "";
+  return "";
+}
+const ASPECT_MAP: Record<string, string> = { "4:5": "3:4", "1:1": "1:1", "9:16": "9:16" };
+function aspectFor(tipo: string, formato: string): string {
+  if (tipo === "historia") return "9:16";
+  if (tipo === "mascota") return "1:1";
+  if (tipo === "elemento") return ASPECT_MAP[formato] ?? "9:16";
+  return ASPECT_MAP[formato] ?? "3:4";
+}
+function genTemplateFor(tipo: string, P: Record<string, string>): string {
+  if (tipo === "mascota") return P.img_gen_mascota ?? P.img_generacion;
+  if (tipo === "elemento") return P.img_gen_elemento ?? P.img_generacion;
+  if (tipo === "historia") return P.img_generacion + "\n\n" + (P.modo_historia ?? "");
+  return P.img_generacion;
+}
+
 
 
 const ANALYSIS_SCHEMA = {
@@ -68,7 +88,7 @@ const PLAN_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; brandContext: string; marketing: string; design: string; sistema: string }) {
+async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; brandContext: string; marketing: string; design: string; sistema: string; modo?: string }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
@@ -76,7 +96,7 @@ async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown
 
 ${input.marketing}
 
-${input.design}`;
+${input.design}${input.modo ? "\n\n" + input.modo : ""}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -95,7 +115,7 @@ ${input.design}`;
   return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
 }
 
-async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; plan: unknown; correction: string; brandContext: string; marketing: string; design: string; sistema: string }) {
+async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown; answers: unknown; plan: unknown; correction: string; brandContext: string; marketing: string; design: string; sistema: string; modo?: string }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const model = process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
@@ -103,7 +123,7 @@ async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown
 
 ${input.marketing}
 
-${input.design}`;
+${input.design}${input.modo ? "\n\n" + input.modo : ""}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -116,7 +136,7 @@ ${input.design}`;
   return { plan: JSON.parse(content), usage: payload.usage ?? {}, model: payload.model ?? model };
 }
 
-async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[], brandContext: string, brandVisuals: { name: string; url: string }[], marketing: string, design: string, analista: string) {
+async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[], brandContext: string, brandVisuals: { name: string; url: string }[], marketing: string, design: string, analista: string, modo = "") {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const imageParts: Array<Record<string, unknown>> = [];
@@ -132,7 +152,7 @@ async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[
 
 ${marketing}
 
-${design}`;
+${design}${modo ? "\n\n" + modo : ""}`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
@@ -166,7 +186,7 @@ function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string)
     .replaceAll("{{design}}", design);
 }
 
-async function generateImageWithOpenRouter(prompt: string, references: string[]) {
+async function generateImageWithOpenRouter(prompt: string, references: string[], opts: { aspect_ratio?: string; transparent?: boolean } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
   const response = await fetch("https://openrouter.ai/api/v1/images", {
@@ -175,9 +195,10 @@ async function generateImageWithOpenRouter(prompt: string, references: string[])
     body: JSON.stringify({
       model: IMAGE_MODEL,
       prompt,
-      aspect_ratio: "3:4",
+      aspect_ratio: opts.aspect_ratio ?? "3:4",
       quality: "high",
       n: 1,
+      ...(opts.transparent ? { background: "transparent", output_format: "png" } : {}),
       input_references: references.map((url) => ({ type: "image_url", image_url: { url } })),
     }),
   });
@@ -290,7 +311,8 @@ export async function POST(request: Request) {
       const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
       if (signed.data?.signedUrl) brandVisuals.push({ name: asset.name, url: signed.data.signedUrl });
     }
-    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals, P.img_marketing, P.img_design, P.img_analista);
+    const tipo = String(form.get("tipo") || "anuncio");
+    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals, P.img_marketing, P.img_design, P.img_analista, modoFor(tipo, P));
     await supabase.from("creative_generations").insert({
       project_id: project.id,
       kind: "analysis",
@@ -320,7 +342,7 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_director });
+      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_director, modo: modoFor(String(body.tipo || "anuncio"), P) });
       const { error } = await supabase.from("creative_projects").update({ form_answers: body.answers, objective: ai.plan.objective, creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -334,7 +356,7 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_revisor });
+      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_revisor, modo: modoFor(String(body.tipo || "anuncio"), P) });
       const { error } = await supabase.from("creative_projects").update({ creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -351,7 +373,9 @@ export async function PATCH(request: Request) {
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: body.plan, approved: true }, { onConflict: "project_id" });
       if (brief.error) throw brief.error;
-      const prompt = imagePrompt(body.plan ?? {}, P.img_design, P.img_generacion);
+      const tipo = String(body.tipo || "anuncio");
+      const formato = String(body.formato || "4:5");
+      const prompt = imagePrompt(body.plan ?? {}, P.img_design, genTemplateFor(tipo, P));
       const { data: generation, error: generationError } = await supabase.from("creative_generations").insert({ project_id: body.projectId, kind: "image", provider: "openrouter", model: IMAGE_MODEL, status: "running", prompt_text: prompt }).select("id").single();
       if (generationError || !generation) throw generationError ?? new Error("No se registró la generación.");
       try {
@@ -371,7 +395,7 @@ export async function PATCH(request: Request) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
           if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
         }
-        const rendered = await generateImageWithOpenRouter(prompt, references);
+        const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" });
         const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });

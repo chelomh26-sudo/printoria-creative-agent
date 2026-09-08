@@ -17,8 +17,18 @@ const steps = [
   { id: "approved", label: "Generación" },
 ] as const;
 
+const TIPOS = [
+  { id: "anuncio", label: "Anuncio" },
+  { id: "historia", label: "Historia" },
+  { id: "mascota", label: "Mascota" },
+  { id: "elemento", label: "Elemento grafico" },
+] as const;
+type TipoId = (typeof TIPOS)[number]["id"];
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("input");
+  const [tipo, setTipo] = useState<TipoId>("anuncio");
+  const [formato, setFormato] = useState("4:5");
   const [idea, setIdea] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [fileRoles, setFileRoles] = useState<Record<string, "locked" | "reference">>({});
@@ -78,6 +88,11 @@ export default function Home() {
     return () => URL.revokeObjectURL(objectUrl);
   }, [files]);
 
+  function selectTipo(t: TipoId) {
+    setTipo(t);
+    setFormato(t === "historia" ? "9:16" : t === "mascota" ? "1:1" : t === "elemento" ? "9:16" : "4:5");
+  }
+
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     selectImageFiles(Array.from(event.target.files ?? []));
     event.target.value = "";
@@ -129,6 +144,8 @@ export default function Home() {
     form.set("idea", idea.trim());
     form.set("title", projectTitle);
     form.set("assetRoles", JSON.stringify(files.map((file) => fileRoles[`${file.name}:${file.size}:${file.lastModified}`] ?? "reference")));
+    form.set("tipo", tipo);
+    form.set("formato", formato);
     files.forEach((file) => form.append("files", file));
     const response = await fetch("/api/projects", { method: "POST", body: form });
     const result = await response.json();
@@ -154,7 +171,7 @@ export default function Home() {
       return;
     }
     setBusy(true);
-    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "plan", projectId, answers, goal }) });
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "plan", projectId, answers, goal, tipo, formato }) });
     const result = await response.json();
     setBusy(false);
     if (!response.ok || !result.plan) setNotice(result.error ?? "No se pudo crear el plan.");
@@ -166,7 +183,7 @@ export default function Home() {
     setBusy(true);
     if (!creativePlan) return;
     const plan = creativePlan;
-    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve", projectId, plan }) });
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve", projectId, plan, tipo, formato }) });
     const result = await response.json();
     setBusy(false);
     if (!response.ok || !result.imageUrl) setNotice(result.error ?? "No se pudo generar la imagen.");
@@ -181,7 +198,7 @@ export default function Home() {
     if (!projectId || !creativePlan) return;
     if (correctionRequest.trim().length < 3) { setNotice("Escribe qué quieres cambiar del plan."); return; }
     setBusy(true); setNotice("");
-    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "revise_plan", projectId, plan: creativePlan, correction: correctionRequest.trim() }) });
+    const response = await fetch("/api/projects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "revise_plan", projectId, plan: creativePlan, correction: correctionRequest.trim(), tipo }) });
     const result = await response.json();
     setBusy(false);
     if (!response.ok || !result.plan) setNotice(result.error ?? "No se pudo corregir el plan.");
@@ -246,6 +263,25 @@ export default function Home() {
           {stage === "input" && (
             <section className="panel">
               <div className="panel-heading"><span className="section-kicker">FASE 1</span><h2>¿Qué quieres crear?</h2><p>Explícamelo como lo harías normalmente. El director analizará tu idea y tus fotografías antes de proponer algo.</p></div>
+              <div style={{ marginBottom: 18 }}>
+                <label className="field-label">Tipo de creativo</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+                  {TIPOS.map((t) => (
+                    <button key={t.id} type="button" onClick={() => selectTipo(t.id)} style={{ padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, border: tipo === t.id ? "1px solid #96D629" : "1px solid #343a3c", background: tipo === t.id ? "rgba(150,214,41,.12)" : "#121517", color: tipo === t.id ? "#c5f169" : "#f5f6f1" }}>{t.label}</button>
+                  ))}
+                </div>
+                {(tipo === "anuncio" || tipo === "elemento") ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: "#9aa0a2" }}>Formato:</span>
+                    <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ background: "#121517", border: "1px solid #343a3c", borderRadius: 9, color: "#f5f6f1", fontSize: 12.5, padding: "8px 11px", fontFamily: "inherit" }}>
+                      {(tipo === "anuncio" ? ["4:5", "1:1", "9:16"] : ["9:16", "1:1"]).map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    {tipo === "elemento" && <span style={{ fontSize: 12, color: "#9aa0a2" }}>fondo transparente</span>}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "#9aa0a2", margin: 0 }}>Formato {formato}{tipo === "mascota" ? " · fondo transparente" : ""}</p>
+                )}
+              </div>
               <label className="field-label" htmlFor="idea">Tu idea o producto</label>
               <textarea id="idea" onChange={(event) => setIdea(event.target.value)} placeholder="Ejemplo: Quiero anunciar este producto para guardar cables. Se puede personalizar y quiero conseguir pedidos por WhatsApp..." value={idea} />
               <div style={{ marginTop: 8 }}><MicButton onText={(t) => setIdea((v) => v ? v + " " + t : t)} title="Dictar la idea" /></div>
@@ -311,7 +347,7 @@ export default function Home() {
               {envDone && <p className="form-notice" style={{ marginTop: 12, background: "rgba(150,214,41,.1)", borderColor: "rgba(150,214,41,.25)", color: "#c5f169" }}>✓ Enviado a Publicaciones{envFecha ? " y programado" : " (queda Listo para programar)"}. Míralo en Publicaciones o Calendario.</p>}
             </div>
 
-            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); }} type="button">Crear otro proyecto</button></div></section>
+            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); setTipo("anuncio"); setFormato("4:5"); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>

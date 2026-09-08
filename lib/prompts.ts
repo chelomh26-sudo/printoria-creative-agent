@@ -50,6 +50,63 @@ PRUEBA OBLIGATORIA DE COMPRENSIÓN: al ver la pieza durante dos segundos debe qu
 
 Las imágenes adjuntas son referencias reales del producto. Mantén al máximo su identidad visual, forma, color, conectores, letras, cantidades y detalles. No agregues productos inexistentes ni cambies nombres. Restricciones adicionales: {{restricciones}}.`;
 
+const MODO_HISTORIA = `MODO HISTORIA (formato 9:16 para Stories / Reels / TikTok):
+- Composicion VERTICAL 9:16 para pantalla completa de celular.
+- ZONAS SEGURAS OBLIGATORIAS: deja libres ~250 px arriba y ~320 px abajo; ahi van la foto de perfil, la barra de progreso, el texto de la red y los botones. NADA de headline, logo, producto clave ni CTA dentro de esas zonas: todo el mensaje y el foco visual van al CENTRO.
+- Primer golpe visual fuerte (thumb-stopping): en el primer segundo se debe entender el producto y el beneficio.
+- Texto mas grande y mas corto que en feed; una sola idea, un solo foco, mucho respiro.
+- Conserva TODAS las reglas del anuncio: producto real protagonista, LOCKED/REFERENCE, identidad de marca, no inventar precios ni datos.`;
+
+const MODO_MASCOTA = `MODO MASCOTA (personaje de marca reusable):
+- Esta pieza NO es un anuncio: no vendes un producto ni usas headline, subheadline ni CTA. El resultado es UN personaje/mascota aislado, con fondo transparente, listo para reusar en videos, posts y campanas.
+- Si el usuario adjunta mascotas existentes (LOCKED o REFERENCE), tratalas como el ADN de estilo: respeta proporciones, paleta, grosor de linea, nivel de detalle, acabado (plano / 3D / render) y "familia" visual. La nueva mascota debe verse HERMANA de esas, no de otro universo.
+- Tus preguntas deben definir: que rol o tema tiene la nueva mascota (ej. constructor, chef, repartidor), que debe conservar del estilo existente, pose y expresion, y elementos o accesorios clave (casco, herramientas, uniforme).
+- No inventes texto, logos ni marcas dentro del personaje salvo que el usuario lo pida explicitamente.
+- Paleta base Printoria disponible si aplica: #96D629, #0B0B0B, #202428, #E1E0E0, #555452.`;
+
+const MODO_ELEMENTO = `MODO ELEMENTO GRAFICO (overlay para video o diseno):
+- No es un anuncio con foto de producto. Creas un elemento grafico limpio para SOBREPONER en un video o diseno: barra / lower-third de negocio, marco, etiqueta de precio, sticker, badge o banner.
+- El fondo es 100% transparente. El CENTRO del lienzo debe quedar libre (ahi va el video o la foto); el grafico vive en una zona concreta (abajo, arriba, esquina o marco) segun lo que pida el usuario.
+- Estilo grafico / vectorial nitido y comercial; NO fotografia realista. Usa la identidad visual de la marca.
+- Tus preguntas deben definir: que elemento es (barra, marco, etiqueta, badge...), donde se coloca, que texto lleva (nombre del negocio, precio, @usuario) y para que red o tamano.
+- Printoria: #96D629, #0B0B0B, #202428, #E1E0E0. Marikekas: calido y de barrio (define colores con el usuario si no hay).`;
+
+const IMG_GEN_MASCOTA = `Genera UNA mascota / personaje de marca para Printoria 3D Studio, aislada, para uso reusable. Debe verse profesional y con personalidad, no un clipart generico.
+
+PERSONAJE: {{concept}}
+RASGOS / DESCRIPCION: {{scene}}
+CONSTRUCCION VISUAL: {{composicion}}
+BASE / REFERENCIA DE ESTILO: {{hero}}
+REFERENCIAS DE ESTILO USADAS: {{referencias}}
+
+REGLAS DURAS:
+- FONDO 100% TRANSPARENTE (PNG con canal alfa). Sin fondo, sin escenario, sin recuadro y sin sombra pegada al borde.
+- Un solo personaje, centrado, cuerpo completo visible, con aire alrededor. No lo recortes en los bordes.
+- Manten EXACTAMENTE el mismo estilo que las referencias adjuntas: proporciones, paleta, grosor de linea, nivel de detalle, acabado y personalidad. Debe verse de la misma familia que tus mascotas actuales.
+- NADA de texto, headline, subheadline, CTA, logos ni marcas dentro de la imagen (a menos que se indique en restricciones).
+- Iluminacion limpia y pareja; colores solidos y nitidos; bordes limpios y bien definidos para poder recortar.
+- No agregues productos, props ni elementos que el usuario no pidio.
+
+Restricciones adicionales: {{restricciones}}.`;
+
+const IMG_GEN_ELEMENTO = `Genera UN elemento grafico de marca con FONDO TRANSPARENTE, para sobreponer en un video o diseno. NO es un anuncio fotografico.
+
+ELEMENTO: {{concept}}
+UBICACION / FORMA: {{scene}}
+CONSTRUCCION: {{composicion}}
+TEXTO A INCLUIR (si aplica): {{headline}} {{subheadline}}
+REFERENCIAS: {{referencias}}
+
+REGLAS DURAS:
+- FONDO 100% TRANSPARENTE (PNG con canal alfa). Sin recuadro de fondo, salvo que el propio elemento sea una barra o tarjeta.
+- Deja el CENTRO del lienzo LIBRE; el grafico ocupa solo su zona (barra inferior o superior, esquina o marco).
+- Estilo grafico / vectorial limpio, moderno y comercial. Nada de fotografia realista ni escenas.
+- Usa SOLO el texto indicado arriba, perfectamente legible y bien escrito. Si no hay texto, no inventes.
+- Alta legibilidad sobre video: buen contraste, formas solidas y margenes de respiracion.
+- Identidad de marca en color y tipografia. No inventes precios ni datos.
+
+Restricciones adicionales: {{restricciones}}.`;
+
 export const PROMPT_DEFAULTS: Record<string, string> = {
   voz_marikekas:
     "Marikekas: fonda de quesadillas en Ciudad Victoria, Tamaulipas, desde 1995 (fundada por Dona Marcia). Producto estrella: 'kekas' = quesadillas fritas tipo empanada (tambien suaves), en tortilla de harina, maiz blanco, rojo y azul. Eslogan: 'Quesadillas con y sin queso'. Voz: calida, de barrio, con antojo, cercana y familiar. Maximo 2 emojis. Publico: senoras 40+, familias, estudiantes, trabajadores.",
@@ -65,6 +122,11 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   img_director: IMG_DIRECTOR,
   img_revisor: IMG_REVISOR,
   img_generacion: IMG_GENERACION,
+  img_gen_mascota: IMG_GEN_MASCOTA,
+  img_gen_elemento: IMG_GEN_ELEMENTO,
+  modo_historia: MODO_HISTORIA,
+  modo_mascota: MODO_MASCOTA,
+  modo_elemento: MODO_ELEMENTO,
 };
 
 export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
@@ -78,6 +140,11 @@ export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
   { key: "img_director", label: "Imágenes — Sistema: Director Creativo (plan)", grupo: "Imágenes — prompts del sistema" },
   { key: "img_revisor", label: "Imágenes — Sistema: Corrección de plan", grupo: "Imágenes — prompts del sistema" },
   { key: "img_generacion", label: "Imágenes — Prompt de generación (usa {{variables}})", grupo: "Imágenes — prompts del sistema" },
+  { key: "modo_historia", label: "Tipos — Historia (9:16, zonas seguras)", grupo: "Tipos de creativo" },
+  { key: "modo_mascota", label: "Tipos — Mascota (modo personaje)", grupo: "Tipos de creativo" },
+  { key: "img_gen_mascota", label: "Tipos — Mascota (generacion, transparente)", grupo: "Tipos de creativo" },
+  { key: "modo_elemento", label: "Tipos — Elemento grafico (modo overlay)", grupo: "Tipos de creativo" },
+  { key: "img_gen_elemento", label: "Tipos — Elemento grafico (generacion, transparente)", grupo: "Tipos de creativo" },
 ];
 
 export async function loadPrompts(supabase: any): Promise<Record<string, string>> {

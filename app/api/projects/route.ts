@@ -14,7 +14,7 @@ function modoFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "letrero") return P.modo_letrero ?? "";
   return "";
 }
-const ASPECT_MAP: Record<string, string> = { "4:5": "3:4", "3:4": "3:4", "1:1": "1:1", "4:3": "4:3", "9:16": "9:16" };
+const ASPECT_MAP: Record<string, string> = { "A4": "3:4", "4:5": "3:4", "3:4": "3:4", "1:1": "1:1", "4:3": "4:3", "9:16": "9:16" };
 function aspectFor(tipo: string, formato: string): string {
   if (tipo === "historia") return "9:16";
   if (tipo === "mascota") return "1:1";

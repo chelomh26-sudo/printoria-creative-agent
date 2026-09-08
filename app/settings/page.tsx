@@ -32,6 +32,7 @@ export default function SettingsPage() {
     setMsg(r.ok ? "✓ Guardado. Aplica en las próximas generaciones." : (r.error || "No se pudo guardar."));
   };
 
+  const docName = (label: string) => (label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, " ").trim().replace(/\s+/g, "-").toLowerCase() || "prompt") + ".md";
   const bajar = (nombre: string, texto: string) => {
     const blob = new Blob([texto ?? ""], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -55,7 +56,7 @@ export default function SettingsPage() {
     } catch { setMsg("Ese archivo no es un JSON válido de prompts."); }
   };
 
-  const inp = { background: "#121517", border: "1px solid #343a3c", borderRadius: 10, color: "#f5f6f1", fontSize: 12.5, padding: "12px", width: "100%", minHeight: 130, resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" } as const;
+  const inp = { background: "#121517", border: "1px solid #343a3c", borderRadius: 10, color: "#f5f6f1", fontSize: 12.5, padding: "12px", width: "100%", minHeight: 240, resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" } as const;
   const mini = { background: "transparent", border: "1px solid rgba(255,255,255,.15)", color: "#9da4a6", borderRadius: 8, fontSize: 11, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" } as const;
 
   return (
@@ -77,7 +78,7 @@ export default function SettingsPage() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
                       <label style={{ fontSize: 13, fontWeight: 700, color: "#f5f6f1" }}>{m.label}</label>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button style={mini} type="button" onClick={() => bajar(m.key + ".txt", prompts[m.key] ?? "")}>⬇ Descargar</button>
+                        <button style={mini} type="button" onClick={() => bajar(docName(m.label), prompts[m.key] ?? "")}>⬇ Descargar</button>
                         <button style={mini} type="button" onClick={() => upRefs.current[m.key]?.click()}>⬆ Subir</button>
                         <input ref={(el) => { upRefs.current[m.key] = el; }} type="file" accept=".txt,.md,text/plain" style={{ display: "none" }} onChange={(e) => subirUno(m.key, e.target.files?.[0] || null)} />
                         <button style={mini} type="button" onClick={() => setPrompts((p) => ({ ...p, [m.key]: defaults[m.key] || "" }))}>↺ Restaurar</button>

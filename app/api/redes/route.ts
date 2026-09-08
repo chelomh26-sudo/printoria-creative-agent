@@ -31,14 +31,19 @@ async function productContext(supabase: SB, negocio: string): Promise<string> {
 async function orFetch(body: unknown) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta OPENROUTER_API_KEY en Vercel.");
-  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Redes" },
-    body: JSON.stringify(body),
-  });
-  const p = await r.json();
-  if (!r.ok) throw new Error(p?.error?.message ?? "OpenRouter fallo.");
-  return p;
+  let lastErr = "OpenRouter fallo.";
+  for (let intento = 0; intento < 3; intento++) {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Redes" },
+      body: JSON.stringify(body),
+    });
+    const p = await r.json();
+    if (r.ok) return p;
+    lastErr = p?.error?.message ?? "OpenRouter fallo.";
+    if (intento < 2) await new Promise((res) => setTimeout(res, 1200 * (intento + 1)));
+  }
+  throw new Error("La IA no respondio tras 3 intentos (" + lastErr + "). Reintenta; si sigue, usa una foto mas ligera.");
 }
 const model = () => process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1-mini";
 

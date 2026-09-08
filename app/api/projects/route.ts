@@ -32,6 +32,15 @@ function genTemplateFor(tipo: string, P: Record<string, string>): string {
 
 
 
+async function orFetchRetry(url: string, options: RequestInit): Promise<Response> {
+  let response = await fetch(url, options);
+  for (let i = 0; i < 2 && !response.ok; i++) {
+    await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+    response = await fetch(url, options);
+  }
+  return response;
+}
+
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
@@ -100,7 +109,7 @@ async function createPlanWithOpenRouter(input: { idea: string; analysis: unknown
 ${input.marketing}
 
 ${input.design}${input.modo ? "\n\n" + input.modo : ""}`;
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await orFetchRetry("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
     body: JSON.stringify({
@@ -127,7 +136,7 @@ async function revisePlanWithOpenRouter(input: { idea: string; analysis: unknown
 ${input.marketing}
 
 ${input.design}${input.modo ? "\n\n" + input.modo : ""}`;
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await orFetchRetry("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
     body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: `IDEA ORIGINAL:\n${input.idea}\n\nANÁLISIS:\n${JSON.stringify(input.analysis)}\n\nRESPUESTAS:\n${JSON.stringify(input.answers)}\n\nBIBLIOTECA DE MARCA:\n${input.brandContext}\n\nPLAN ACTUAL:\n${JSON.stringify(input.plan)}\n\nCORRECCIÓN SOLICITADA:\n${input.correction}\n\nDevuelve el plan completo ya corregido.` }], response_format: { type: "json_schema", json_schema: { name: "printoria_revised_plan", strict: true, schema: PLAN_SCHEMA } }, provider: { require_parameters: true }, temperature: 0.2 }),
@@ -156,7 +165,7 @@ async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[
 ${marketing}
 
 ${design}${modo ? "\n\n" + modo : ""}`;
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await orFetchRetry("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
     body: JSON.stringify({
@@ -192,7 +201,7 @@ function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string)
 async function generateImageWithOpenRouter(prompt: string, references: string[], opts: { aspect_ratio?: string; transparent?: boolean } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
-  const response = await fetch("https://openrouter.ai/api/v1/images", {
+  const response = await orFetchRetry("https://openrouter.ai/api/v1/images", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
     body: JSON.stringify({

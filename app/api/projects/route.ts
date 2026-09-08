@@ -14,13 +14,13 @@ function modoFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "letrero") return P.modo_letrero ?? "";
   return "";
 }
-const ASPECT_MAP: Record<string, string> = { "A4": "3:4", "4:5": "3:4", "3:4": "3:4", "1:1": "1:1", "4:3": "4:3", "9:16": "9:16" };
+const ASPECT_MAP: Record<string, string> = { "A4": "2:3", "2:3": "2:3", "3:4": "2:3", "4:5": "2:3", "1:1": "1:1", "4:3": "3:2", "3:2": "3:2", "9:16": "9:16", "16:9": "16:9" };
 function aspectFor(tipo: string, formato: string): string {
   if (tipo === "historia") return "9:16";
   if (tipo === "mascota") return "1:1";
   if (tipo === "elemento") return ASPECT_MAP[formato] ?? "9:16";
-  if (tipo === "letrero") return ASPECT_MAP[formato] ?? "4:5";
-  return ASPECT_MAP[formato] ?? "3:4";
+  if (tipo === "letrero") return ASPECT_MAP[formato] ?? "2:3";
+  return ASPECT_MAP[formato] ?? "2:3";
 }
 function genTemplateFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "mascota") return P.img_gen_mascota ?? P.img_generacion;

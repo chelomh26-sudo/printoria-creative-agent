@@ -107,31 +107,30 @@ REGLAS DURAS:
 
 Restricciones adicionales: {{restricciones}}.`;
 
-const MODO_LETRERO = `MODO LETRERO (cartel/letrero para imprimir o mostrar, varias medidas):
-- Es un LETRERO, no un folleto: UNA sola idea/objetivo claro. Nada de llenarlo de info, features ni muchos iconos.
-- Primero clava EL OBJETIVO: que quieres que la persona haga o entienda en 3 segundos (seguir, escanear QR, conocer el negocio, pedir, promo). Todo el diseno sirve a ese objetivo.
-- Tus preguntas deben definir: objetivo unico, mensaje principal en pocas palabras, 1 CTA, y donde se pone (mostrador, pared, punto de venta).
-- Menos es mas: 1 titular fuerte + maximo 1-2 apoyos cortos. Lo demas DECORA y refuerza marca (glow, formas, VIC/logo discretos), no informa de mas.
-- Conserva identidad Printoria y no inventes datos.`;
+const MODO_LETRERO = `MODO LETRERO (cartel VERTICAL para pared o mostrador, punto de venta; varias medidas, por defecto A4 vertical):
+- Es un LETRERO tipo cartel, NO un post de feed ni una foto de producto tipo anuncio. Composicion VERTICAL, tipografia grande, estilo poster.
+- PROTAGONISTA: la mascota VIC de Printoria (cubo verde con gorra negra "Printoria 3D VIC", ojos cartoon grandes, guantes blancos, tenis verdes, estilo Pixar/glossy 3D) presentando o sosteniendo el producto/idea, como en los letreros que ya gustaron. La mascota manda; el producto real (si hay) va en su mano o a su lado.
+- UN solo objetivo claro (tocar, seguir, escanear QR, pedir) + 1 titular fuerte + maximo 1 apoyo corto (burbuja) + logo. Nada de listas de features ni saturar.
+- Fondo negro/carbon con acento verde #96D629, mucho contraste, look de cartel divertido y pro que se lee de lejos.
+- Tus preguntas: objetivo unico, titular corto, 1 apoyo, y si lleva QR o producto.`;
 
-const IMG_GEN_LETRERO = `Disena un LETRERO / cartel PREMIUM y LIMPIO para Printoria 3D Studio. Un solo objetivo, mucho aire. Debe verse pro, no saturado.
+const IMG_GEN_LETRERO = `Disena un LETRERO / cartel VERTICAL premium para Printoria 3D Studio (pared o mostrador, punto de venta). NO es un post de feed ni una foto de producto: es un CARTEL con tipografia grande y la mascota de protagonista.
 
-OBJETIVO / CONCEPTO: {{concept}}
-MENSAJE PRINCIPAL (titular): {{headline}}
-APOYO CORTO (opcional): {{subheadline}}
+OBJETIVO: {{concept}}
+TITULAR (grande, domina la pieza): {{headline}}
+APOYO CORTO (burbuja, opcional): {{subheadline}}
 CTA: {{cta}}
-ESCENARIO / DECORACION: {{scene}}
+ESCENA / DECORACION: {{scene}}
 COMPOSICION: {{composicion}}
 REFERENCIAS: {{referencias}}
 
-REGLAS DURAS (anti-saturacion):
-- Jerarquia brutal: 1 titular domina la pieza. Maximo 2-3 niveles de texto en total.
-- NADA de listas largas de features, ni bloques de info, ni muchos iconos. Si hay apoyos, maximo 1-2 y cortos.
-- MUCHO espacio negativo y respiro. El vacio es parte del diseno.
-- La decoracion (glow verde, formas simples, VIC o logo) APOYA sin competir ni tapar el mensaje.
-- Identidad: negro/carbon dominante, acento verde #96D629, blanco. Tagline IMPRIMIENDO POSIBILIDADES solo si cabe limpio.
-- Deja zona limpia para QR o logo cuando aplique. Producto real intacto si lo hay.
-- Texto perfectamente legible y bien escrito. No inventes precios ni datos.
+REGLAS:
+- Formato VERTICAL tipo cartel. Composicion de poster, no de anuncio fotografico apaisado.
+- PROTAGONISTA: la mascota VIC de Printoria — cubo verde, gorra negra "Printoria 3D VIC", ojos cartoon grandes, guantes blancos, tenis verdes, estilo Pixar/glossy 3D — presentando o sosteniendo el producto/idea. Dibujala fiel a ese estilo.
+- Jerarquia brutal: 1 titular enorme arriba, maximo 1 apoyo corto en burbuja, logo abajo. NADA de listas de features ni bloques de info.
+- Fondo negro/carbon con acento verde #96D629 y blanco; detalles divertidos (garabatos, chispas) con medida. Alto contraste, legible de lejos.
+- Producto real (si hay) en la mano de la mascota o a su lado, intacto.
+- Texto perfectamente legible y bien escrito. Logo Printoria o tagline IMPRIMIENDO POSIBILIDADES abajo. No inventes precios ni datos.
 
 Restricciones adicionales: {{restricciones}}.`;
 

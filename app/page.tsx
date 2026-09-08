@@ -275,7 +275,7 @@ export default function Home() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: "#9aa0a2" }}>Formato:</span>
                     <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ background: "#121517", border: "1px solid #343a3c", borderRadius: 9, color: "#f5f6f1", fontSize: 12.5, padding: "8px 11px", fontFamily: "inherit" }}>
-                      {(tipo === "anuncio" ? ["4:5", "1:1", "9:16"] : tipo === "letrero" ? ["A4", "3:4", "4:5", "1:1", "4:3", "9:16"] : ["9:16", "1:1"]).map((f) => <option key={f} value={f}>{f}</option>)}
+                      {(tipo === "anuncio" ? ["4:5", "1:1", "9:16"] : tipo === "letrero" ? ["A4", "1:1", "3:2", "9:16"] : ["9:16", "1:1"]).map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
                     {tipo === "elemento" && <span style={{ fontSize: 12, color: "#9aa0a2" }}>fondo transparente</span>}
                   </div>

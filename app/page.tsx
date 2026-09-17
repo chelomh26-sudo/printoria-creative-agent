@@ -4,6 +4,8 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MicButton } from "../components/MicButton";
+import { Cuantizador4 } from "../components/Cuantizador4";
+import { Generador3D } from "../components/Generador3D";
 
 type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
@@ -23,6 +25,8 @@ const TIPOS = [
   { id: "mascota", label: "Mascota" },
   { id: "elemento", label: "Elemento grafico" },
   { id: "letrero", label: "Letrero" },
+  { id: "sticker", label: "Llavero 4 colores" },
+  { id: "modelo3d", label: "Imagen para modelo 3D" },
 ] as const;
 type TipoId = (typeof TIPOS)[number]["id"];
 
@@ -91,7 +95,7 @@ export default function Home() {
 
   function selectTipo(t: TipoId) {
     setTipo(t);
-    setFormato(t === "historia" ? "9:16" : t === "mascota" ? "1:1" : t === "elemento" ? "9:16" : t === "letrero" ? "A4" : "4:5");
+    setFormato(t === "historia" ? "9:16" : t === "mascota" ? "1:1" : t === "elemento" ? "9:16" : t === "letrero" ? "A4" : (t === "sticker" || t === "modelo3d") ? "1:1" : "4:5");
   }
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
@@ -238,8 +242,6 @@ export default function Home() {
           <Link className="nav-item" href="/calendario"><span>◫</span> Calendario</Link>
           <Link className="nav-item" href="/archivo"><span>▤</span> Biblioteca pub.</Link>
           <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
-          <Link className="nav-item" href="/produccion/4colores"><span>◑</span> 4 Colores</Link>
-          <Link className="nav-item" href="/produccion/3d"><span>⬢</span> Foto → 3D</Link>
           <Link className="nav-item" href="/settings"><span>⚙</span> Ajustes</Link>
         </nav>
         <div className="sidebar-status">
@@ -330,6 +332,8 @@ export default function Home() {
 
           {stage === "approved" && (
             <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p>
+            {tipo === "sticker" && imageResult && <Cuantizador4 imageUrl={imageResult.url} />}
+            {tipo === "modelo3d" && imageResult && <Generador3D imageUrl={imageResult.url} />}
 
             <div className="plan-correction" style={{ marginTop: 24, textAlign: "left" }}>
               <label className="field-label">Enviar a Publicaciones</label>

@@ -222,7 +222,7 @@ async function generateImageWithOpenRouter(prompt: string, references: string[],
       aspect_ratio: opts.aspect_ratio ?? "3:4",
       quality: "high",
       n: 1,
-      ...(opts.transparent ? { background: "transparent", output_format: "png" } : {}),
+      // background transparente no lo soporta gpt-image-2 por OpenRouter; el fondo se controla por prompt.
       input_references: references.map((url) => ({ type: "image_url", image_url: { url } })),
     }),
   });

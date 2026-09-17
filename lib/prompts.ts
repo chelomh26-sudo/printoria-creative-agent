@@ -151,7 +151,7 @@ BASE / REFERENCIA REAL: {{hero}}
 REFERENCIAS USADAS: {{referencias}}
 
 REGLAS DURAS:
-- FONDO 100% TRANSPARENTE (PNG con alfa). Sin escena, sin recuadro, sin sombra pegada.
+- FONDO LISO DE UN SOLO COLOR PLANO (blanco puro #FFFFFF), sin escena, sin recuadro, sin sombras ni degradados. El sujeto va centrado sobre ese fondo, recortable.
 - Un solo sujeto, centrado, completo, con aire alrededor. Estilo STICKER die-cut.
 - COLORES PLANOS Y SÓLIDOS, muy pocos (3-4). NADA de degradados, NADA de sombras suaves, NADA de texturas finas ni ruido. Contornos limpios y gruesos.
 - Formas simples y legibles a tamaño pequeño (llavero/imán 5-8 cm). Zonas de color bien separadas (cada zona = un filamento distinto).
@@ -176,7 +176,7 @@ BASE / REFERENCIA: {{hero}}
 REFERENCIAS USADAS: {{referencias}}
 
 REGLAS DURAS:
-- UN solo objeto sólido, centrado, completo, en vista 3/4 o frontal clara, fondo neutro liso o transparente. Sin escena, sin texto, sin manos, sin props que estorben.
+- UN solo objeto sólido, centrado, completo, en vista 3/4 o frontal clara, sobre FONDO LISO DE UN SOLO COLOR (blanco o gris claro), sin escena, sin texto, sin manos, sin props que estorben.
 - Iluminación pareja de estudio, materiales claros, colores sólidos; que se entienda bien la forma y el volumen desde este ángulo (una IA lo usará para reconstruir el 3D).
 - Diseño imprimible: formas sólidas y estables, sin partes flotantes imposibles ni detalles demasiado frágiles.
 - Respeta exactamente lo que el usuario pidió cambiar de la referencia (ej. cambiar el animal por un jaguar, conservar la función de sostener algo en la mano).

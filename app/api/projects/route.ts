@@ -12,6 +12,8 @@ function modoFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "mascota") return P.modo_mascota ?? "";
   if (tipo === "elemento") return P.modo_elemento ?? "";
   if (tipo === "letrero") return P.modo_letrero ?? "";
+  if (tipo === "sticker") return P.modo_sticker ?? "";
+  if (tipo === "modelo3d") return P.modo_modelo3d ?? "";
   return "";
 }
 const ASPECT_MAP: Record<string, string> = { "A4": "2:3", "2:3": "2:3", "3:4": "2:3", "4:5": "2:3", "1:1": "1:1", "4:3": "3:2", "3:2": "3:2", "9:16": "9:16", "16:9": "16:9" };
@@ -20,12 +22,15 @@ function aspectFor(tipo: string, formato: string): string {
   if (tipo === "mascota") return "1:1";
   if (tipo === "elemento") return ASPECT_MAP[formato] ?? "9:16";
   if (tipo === "letrero") return ASPECT_MAP[formato] ?? "2:3";
+  if (tipo === "sticker" || tipo === "modelo3d") return "1:1";
   return ASPECT_MAP[formato] ?? "2:3";
 }
 function genTemplateFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "mascota") return P.img_gen_mascota ?? P.img_generacion;
   if (tipo === "elemento") return P.img_gen_elemento ?? P.img_generacion;
   if (tipo === "letrero") return P.img_gen_letrero ?? P.img_generacion;
+  if (tipo === "sticker") return P.img_gen_sticker ?? P.img_generacion;
+  if (tipo === "modelo3d") return P.img_gen_modelo3d ?? P.img_generacion;
   if (tipo === "historia") return P.img_generacion + "\n\n" + (P.modo_historia ?? "");
   return P.img_generacion;
 }
@@ -407,7 +412,7 @@ export async function PATCH(request: Request) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
           if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
         }
-        const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" });
+        const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" || tipo === "sticker" || tipo === "modelo3d" });
         const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });

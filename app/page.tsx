@@ -238,6 +238,8 @@ export default function Home() {
           <Link className="nav-item" href="/calendario"><span>◫</span> Calendario</Link>
           <Link className="nav-item" href="/archivo"><span>▤</span> Biblioteca pub.</Link>
           <Link className="nav-item" href="/library"><span>◇</span> Biblioteca de marca</Link>
+          <Link className="nav-item" href="/produccion/4colores"><span>◑</span> 4 Colores</Link>
+          <Link className="nav-item" href="/produccion/3d"><span>⬢</span> Foto → 3D</Link>
           <Link className="nav-item" href="/settings"><span>⚙</span> Ajustes</Link>
         </nav>
         <div className="sidebar-status">

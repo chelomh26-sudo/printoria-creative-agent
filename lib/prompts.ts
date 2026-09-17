@@ -134,6 +134,57 @@ REGLAS:
 
 Restricciones adicionales: {{restricciones}}.`;
 
+const MODO_STICKER = `MODO STICKER / CARICATURA PARA IMPRIMIR (llavero, imán, sticker a 4 colores):
+- El resultado NO es un anuncio: es UNA ilustración tipo sticker/caricatura del sujeto, aislada, fondo 100% transparente, lista para imprimir en 3D a POCOS colores.
+- Convierte la foto real (mascota, logo, personaje, objeto) en una caricatura limpia estilo sticker die-cut: formas simples, contorno grueso, colores planos y sólidos, SIN degradados, SIN sombras suaves, SIN texturas finas. Debe leerse bien a tamaño pequeño (5-8 cm).
+- MUY POCOS colores planos (idealmente 3-4), separables, pensados para imprimir cada zona en un filamento distinto. Alto contraste entre zonas.
+- Conserva lo reconocible del sujeto (rasgos, pose, identidad) pero simplifícalo; el grado de fidelidad depende de lo que pida el usuario.
+- Tus preguntas deben definir: qué tanto se debe parecer al real vs. más caricatura; el estilo (mascota kawaii, cartoon, mascota deportiva, línea gruesa); qué elementos conservar sí o sí (colores del uniforme, accesorios); y si lleva texto/nombre (para llavero).
+- Nada de fondo, escena ni texto salvo que el usuario lo pida.`;
+
+const IMG_GEN_STICKER = `Genera UNA ilustración tipo STICKER / caricatura para imprimir en 3D a pocos colores, para Printoria 3D Studio. NO es un anuncio ni una foto.
+
+SUJETO: {{concept}}
+DESCRIPCIÓN / RASGOS: {{scene}}
+CONSTRUCCIÓN VISUAL: {{composicion}}
+BASE / REFERENCIA REAL: {{hero}}
+REFERENCIAS USADAS: {{referencias}}
+
+REGLAS DURAS:
+- FONDO 100% TRANSPARENTE (PNG con alfa). Sin escena, sin recuadro, sin sombra pegada.
+- Un solo sujeto, centrado, completo, con aire alrededor. Estilo STICKER die-cut.
+- COLORES PLANOS Y SÓLIDOS, muy pocos (3-4). NADA de degradados, NADA de sombras suaves, NADA de texturas finas ni ruido. Contornos limpios y gruesos.
+- Formas simples y legibles a tamaño pequeño (llavero/imán 5-8 cm). Zonas de color bien separadas (cada zona = un filamento distinto).
+- Conserva la identidad del sujeto de la referencia real (rasgos, colores clave, pose) pero simplifícala como caricatura.
+- Sin texto dentro salvo que se indique en restricciones. No inventes elementos que el usuario no pidió.
+
+Restricciones adicionales: {{restricciones}}.`;
+
+const MODO_MODELO3D = `MODO MODELO 3D (concepto para convertir a modelo imprimible con IA):
+- El objetivo final es un MODELO 3D imprimible (STL), no un anuncio. Esta fase genera un RENDER de concepto claro del objeto que luego una IA convierte a 3D.
+- El objeto debe verse como UNA sola pieza sólida, centrada, fondo neutro/transparente, vista de 3/4 o frontal clara, bien iluminado y sin recortes. Nada de escena, texto, manos ni props que estorben.
+- Piensa en imprimibilidad: formas sólidas, sin partes flotantes imposibles, con detalle suficiente pero no frágil.
+- Tus preguntas deben definir: qué objeto es exactamente y para qué sirve (ej. portadados = sostiene los dados en la mano); qué debe cambiar respecto a la referencia (ej. "como este pero que sea un jaguar y que traiga X en la mano"); estilo (realista, caricatura, low-poly); tamaño aproximado; y qué parte es funcional (que sí debe poder sostener/usar).
+- No inventes medidas exactas ni tiempos.`;
+
+const IMG_GEN_MODELO3D = `Genera UN render de concepto de un OBJETO 3D para convertirlo luego a modelo imprimible (STL), para Printoria 3D Studio. NO es un anuncio.
+
+OBJETO: {{concept}}
+DESCRIPCIÓN: {{scene}}
+CONSTRUCCIÓN / PARTES: {{composicion}}
+BASE / REFERENCIA: {{hero}}
+REFERENCIAS USADAS: {{referencias}}
+
+REGLAS DURAS:
+- UN solo objeto sólido, centrado, completo, en vista 3/4 o frontal clara, fondo neutro liso o transparente. Sin escena, sin texto, sin manos, sin props que estorben.
+- Iluminación pareja de estudio, materiales claros, colores sólidos; que se entienda bien la forma y el volumen desde este ángulo (una IA lo usará para reconstruir el 3D).
+- Diseño imprimible: formas sólidas y estables, sin partes flotantes imposibles ni detalles demasiado frágiles.
+- Respeta exactamente lo que el usuario pidió cambiar de la referencia (ej. cambiar el animal por un jaguar, conservar la función de sostener algo en la mano).
+- Sin marcas de agua ni texto dentro. No inventes elementos que no se pidieron.
+
+Restricciones adicionales: {{restricciones}}.`;
+
+
 export const PROMPT_DEFAULTS: Record<string, string> = {
   voz_marikekas:
     "Marikekas: fonda de quesadillas en Ciudad Victoria, Tamaulipas, desde 1995 (fundada por Dona Marcia). Producto estrella: 'kekas' = quesadillas fritas tipo empanada (tambien suaves), en tortilla de harina, maiz blanco, rojo y azul. Eslogan: 'Quesadillas con y sin queso'. Voz: calida, de barrio, con antojo, cercana y familiar. Maximo 2 emojis. Publico: senoras 40+, familias, estudiantes, trabajadores.",
@@ -170,6 +221,10 @@ NO inventes precios ni datos. Printoria: cierra con IMPRIMIENDO POSIBILIDADES cu
   modo_elemento: MODO_ELEMENTO,
   modo_letrero: MODO_LETRERO,
   img_gen_letrero: IMG_GEN_LETRERO,
+  modo_sticker: MODO_STICKER,
+  img_gen_sticker: IMG_GEN_STICKER,
+  modo_modelo3d: MODO_MODELO3D,
+  img_gen_modelo3d: IMG_GEN_MODELO3D,
 };
 
 export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
@@ -190,6 +245,10 @@ export const PROMPT_META: { key: string; label: string; grupo: string }[] = [
   { key: "img_gen_elemento", label: "Tipos — Elemento grafico (generacion, transparente)", grupo: "Tipos de creativo" },
   { key: "modo_letrero", label: "Tipos — Letrero (limpio, objetivo unico)", grupo: "Tipos de creativo" },
   { key: "img_gen_letrero", label: "Tipos — Letrero (generacion, varias medidas)", grupo: "Tipos de creativo" },
+  { key: "modo_sticker", label: "Producción — Sticker/4 colores (modo)", grupo: "Producción" },
+  { key: "img_gen_sticker", label: "Producción — Sticker/4 colores (generación)", grupo: "Producción" },
+  { key: "modo_modelo3d", label: "Producción — Foto→3D (modo)", grupo: "Producción" },
+  { key: "img_gen_modelo3d", label: "Producción — Foto→3D (generación de concepto)", grupo: "Producción" },
 ];
 
 export async function loadPrompts(supabase: any): Promise<Record<string, string>> {

@@ -35,6 +35,13 @@ function genTemplateFor(tipo: string, P: Record<string, string>): string {
   return P.img_generacion;
 }
 
+function esProduccion(tipo: string): boolean { return tipo === "sticker" || tipo === "modelo3d"; }
+function analistaFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_analista ?? P.img_analista) : P.img_analista; }
+function directorFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_director ?? P.img_director) : P.img_director; }
+function revisorFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_revisor ?? P.img_revisor) : P.img_revisor; }
+function marketingFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? "" : P.img_marketing; }
+function designFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? "" : P.img_design; }
+
 
 
 async function orFetchRetry(url: string, options: RequestInit): Promise<Response> {
@@ -323,13 +330,15 @@ export async function POST(request: Request) {
       if (asset.error) throw asset.error;
     }
     const brandAssets = await loadBrandAssets(supabase);
+    const tipo = String(form.get("tipo") || "anuncio");
+    const prod = esProduccion(tipo);
     const brandVisuals: { name: string; url: string }[] = [];
-    for (const asset of brandAssets.filter((item) => item.category === "visual_reference").slice(0, 2)) {
+    if (!prod) for (const asset of brandAssets.filter((item) => item.category === "visual_reference").slice(0, 2)) {
       const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
       if (signed.data?.signedUrl) brandVisuals.push({ name: asset.name, url: signed.data.signedUrl });
     }
-    const tipo = String(form.get("tipo") || "anuncio");
-    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, describeBrandAssets(brandAssets), brandVisuals, P.img_marketing, P.img_design, P.img_analista, modoFor(tipo, P));
+    const brandCtx = prod ? "ESTA PIEZA ES INDEPENDIENTE: NO uses la biblioteca de marca ni referencias de otros proyectos. Trabaja SOLO con la imagen que subio el usuario." : describeBrandAssets(brandAssets);
+    const ai = await analyzeWithOpenRouter(idea, files, assetRoles, brandCtx, brandVisuals, marketingFor(tipo, P), designFor(tipo, P), analistaFor(tipo, P), modoFor(tipo, P));
     await supabase.from("creative_generations").insert({
       project_id: project.id,
       kind: "analysis",
@@ -359,7 +368,8 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_director, modo: modoFor(String(body.tipo || "anuncio"), P) });
+      const tipoPlan = String(body.tipo || "anuncio");
+      const ai = await createPlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: body.answers, brandContext: esProduccion(tipoPlan) ? "Pieza independiente: NO uses biblioteca de marca ni referencias de otros proyectos." : describeBrandAssets(brandAssets), marketing: marketingFor(tipoPlan, P), design: designFor(tipoPlan, P), sistema: directorFor(tipoPlan, P), modo: modoFor(tipoPlan, P) });
       const { error } = await supabase.from("creative_projects").update({ form_answers: body.answers, objective: ai.plan.objective, creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -373,7 +383,8 @@ export async function PATCH(request: Request) {
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", body.projectId).eq("kind", "analysis").order("created_at", { ascending: false }).limit(1).maybeSingle();
       const brandAssets = await loadBrandAssets(supabase);
-      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: describeBrandAssets(brandAssets), marketing: P.img_marketing, design: P.img_design, sistema: P.img_revisor, modo: modoFor(String(body.tipo || "anuncio"), P) });
+      const tipoRev = String(body.tipo || "anuncio");
+      const ai = await revisePlanWithOpenRouter({ idea: project.idea, analysis: analysisRow?.output_data ?? {}, answers: project.form_answers ?? {}, plan: body.plan ?? project.creative_plan ?? {}, correction, brandContext: esProduccion(tipoRev) ? "Pieza independiente: NO uses biblioteca de marca ni referencias de otros proyectos." : describeBrandAssets(brandAssets), marketing: marketingFor(tipoRev, P), design: designFor(tipoRev, P), sistema: revisorFor(tipoRev, P), modo: modoFor(tipoRev, P) });
       const { error } = await supabase.from("creative_projects").update({ creative_plan: ai.plan, status: "plan", updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;
       const brief = await supabase.from("creative_briefs").upsert({ project_id: body.projectId, brief: ai.plan, approved: false, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
@@ -403,6 +414,7 @@ export async function PATCH(request: Request) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
           if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
         }
+        if (!esProduccion(tipo)) {
         const libraryAssets = await loadBrandAssets(supabase);
         const requestedNames = Array.isArray(body.plan?.references_used) ? body.plan.references_used.map((item: unknown) => String(item).toLowerCase()) : [];
         const officialLogo = libraryAssets.find((asset) => asset.category === "logo" && asset.name.toLowerCase().includes("sin fondo")) ?? libraryAssets.find((asset) => asset.category === "logo");
@@ -411,6 +423,7 @@ export async function PATCH(request: Request) {
         for (const asset of selectedLibraryAssets) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
           if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
+        }
         }
         const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" || tipo === "sticker" || tipo === "modelo3d" });
         const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";

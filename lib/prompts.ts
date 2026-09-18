@@ -139,7 +139,14 @@ const MODO_STICKER = `MODO STICKER / CARICATURA PARA IMPRIMIR (llavero, imán, s
 - Convierte la foto real (mascota, logo, personaje, objeto) en una caricatura limpia estilo sticker die-cut: formas simples, contorno grueso, colores planos y sólidos, SIN degradados, SIN sombras suaves, SIN texturas finas. Debe leerse bien a tamaño pequeño (5-8 cm).
 - MUY POCOS colores planos (idealmente 3-4), separables, pensados para imprimir cada zona en un filamento distinto. Alto contraste entre zonas.
 - Conserva lo reconocible del sujeto (rasgos, pose, identidad) pero simplifícalo; el grado de fidelidad depende de lo que pida el usuario.
-- Tus preguntas deben definir: qué tanto se debe parecer al real vs. más caricatura; el estilo (mascota kawaii, cartoon, mascota deportiva, línea gruesa); qué elementos conservar sí o sí (colores del uniforme, accesorios); y si lleva texto/nombre (para llavero).
+- OBLIGATORIO: haz 5-6 preguntas y que incluyan SÍ O SÍ estas, con 3-4 opciones concretas + "Otro":
+  (1) QUÉ es el sujeto (animal, persona, objeto o personaje) y cómo tratarlo;
+  (2) la POSE/POSICIÓN exacta que quiere (de frente, de perfil, sentado, parado, saludando, corriendo, brazos arriba, etc.);
+  (3) TAMAÑO/PROPORCIÓN y encuadre (cuerpo completo o solo cabeza; estilo chibi/cabezón y compacto, chiquito, o más proporcionado);
+  (4) qué tanto parecerse al real vs. más caricatura;
+  (5) qué elementos y colores conservar sí o sí (uniforme, accesorios, manchas);
+  (6) si lleva texto/nombre (para llavero).
+  El usuario debe poder decir "lo quiero chiquito, en tal pose" ANTES de generar.
 - Nada de fondo, escena ni texto salvo que el usuario lo pida.`;
 
 const IMG_GEN_STICKER = `Genera UNA ilustración tipo STICKER / caricatura para imprimir en 3D a pocos colores, para Printoria 3D Studio. NO es un anuncio ni una foto.
@@ -153,7 +160,9 @@ REFERENCIAS USADAS: {{referencias}}
 REGLAS DURAS:
 - FONDO LISO DE UN SOLO COLOR PLANO (blanco puro #FFFFFF), sin escena, sin recuadro, sin sombras ni degradados. El sujeto va centrado sobre ese fondo, recortable.
 - Un solo sujeto, centrado, completo, con aire alrededor. Estilo STICKER die-cut.
-- COLORES PLANOS Y SÓLIDOS, muy pocos (3-4). NADA de degradados, NADA de sombras suaves, NADA de texturas finas ni ruido. Contornos limpios y gruesos.
+- COLORES PLANOS Y SÓLIDOS, muy pocos (3-4). PROHIBIDA CUALQUIER SOMBRA: nada de sombras suaves, sombras proyectadas, sombreado, oclusión, brillos ni degradados; NUNCA una sombra de otro color. Cada zona es UN color plano y parejo, sin variación de tono dentro de la zona.
+- NADA de texturas finas ni ruido. Contornos limpios y gruesos.
+- Respeta EXACTAMENTE la pose, el tamaño/proporción y el encuadre indicados en la descripción (SUJETO/DESCRIPCIÓN/CONSTRUCCIÓN).
 - Formas simples y legibles a tamaño pequeño (llavero/imán 5-8 cm). Zonas de color bien separadas (cada zona = un filamento distinto).
 - Conserva la identidad del sujeto de la referencia real (rasgos, colores clave, pose) pero simplifícala como caricatura.
 - Sin texto dentro salvo que se indique en restricciones. No inventes elementos que el usuario no pidió.

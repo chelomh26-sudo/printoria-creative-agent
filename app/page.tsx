@@ -11,7 +11,7 @@ type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
 type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
 type CreativePlan = { concept: string; rationale: string; objective: string; audience: string; format: string; visual_composition: string[]; hero_asset: string; scene: string; headline: string; subheadline: string; cta: string; references_used: string[]; ai_generated_elements: string[]; preserved_real_elements: string[]; restrictions: string[]; qa_checklist: string[] };
-type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: string[]; instruccion_final: string };
+type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: { pregunta: string; opciones: string[] }[]; instruccion_final: string };
 type ImageResult = { url: string; model: string; imageCostUsd: number; totalCostUsd: number; id?: string | null; note?: string | null };
 const steps = [
   { id: "input", label: "Entrada" },
@@ -57,6 +57,7 @@ export default function Home() {
   const [correccion, setCorreccion] = useState("");
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [interpBusy, setInterpBusy] = useState(false);
+  const [respDudas, setRespDudas] = useState<Record<number, string>>({});
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
@@ -135,15 +136,20 @@ export default function Home() {
   }
 
   function limpiarAjuste() {
-    setEditText(""); setEditFiles([]); setPropuesta(null); setHistorialAjuste([]); setCorreccion(""); setCorrigiendo(false);
+    setEditText(""); setEditFiles([]); setPropuesta(null); setHistorialAjuste([]); setCorreccion(""); setCorrigiendo(false); setRespDudas({});
   }
 
   // Paso 1: la IA explica qué va a hacer (2 pasadas en el servidor). Nada se genera todavía.
-  async function revisarAjuste(conCorreccion = false) {
+  async function revisarAjuste(modo: "nuevo" | "correccion" | "dudas" = "nuevo") {
     if (interpBusy || editBusy || !projectId || !imageResult) return;
     if (editText.trim().length < 3) { setEditError("Escribe qué quieres ajustar de la imagen."); return; }
-    if (conCorreccion && correccion.trim().length < 3) { setEditError("Dime qué entendí mal."); return; }
-    const historial = conCorreccion && propuesta ? [...historialAjuste, { interpretacion: `${propuesta.entendi} | ${propuesta.cambios.join("; ")}`, correccion: correccion.trim() }] : historialAjuste;
+    if (modo === "correccion" && correccion.trim().length < 3) { setEditError("Dime qué entendí mal."); return; }
+    const dudas = propuesta?.dudas ?? [];
+    if (modo === "dudas" && dudas.some((_, i) => !respDudas[i]?.trim())) { setEditError("Contesta todas las dudas."); return; }
+    const textoCorreccion = modo === "dudas"
+      ? "RESPUESTAS A DUDAS: " + dudas.map((d, i) => `${d.pregunta} → ${respDudas[i].trim()}`).join(" | ")
+      : correccion.trim();
+    const historial = modo !== "nuevo" && propuesta ? [...historialAjuste, { interpretacion: `${propuesta.entendi} | ${propuesta.cambios.join("; ")}`, correccion: textoCorreccion }] : historialAjuste;
     setInterpBusy(true);
     setEditError("");
     const form = new FormData();
@@ -162,6 +168,7 @@ export default function Home() {
       setPropuesta(result.interpretacion);
       setCorreccion("");
       setCorrigiendo(false);
+      setRespDudas({});
     } catch { setEditError("Se cortó la conexión. Intenta otra vez."); }
     finally { setInterpBusy(false); }
   }
@@ -476,15 +483,34 @@ export default function Home() {
                 <small style={{ color: "#8e9698", fontSize: 10.5, display: "block", marginTop: 6 }}>Máx. 2 archivos. Primero te digo qué entendí; la imagen sólo se hace cuando le das ✓. Revisar cuesta centavos; cada imagen ~$0.13 USD.</small>
                 {editError && <p className="form-notice" role="alert" style={{ marginTop: 12 }}>{editError}</p>}
                 {!propuesta && (
-                  <button className="primary-button" disabled={interpBusy || editText.trim().length < 3} onClick={() => revisarAjuste(false)} type="button">{interpBusy ? <><span className="gen-spinner small"/> Entendiendo tu ajuste (2 revisiones)…</> : <>🔍 Revisar ajuste <span>→</span></>}</button>
+                  <button className="primary-button" disabled={interpBusy || editText.trim().length < 3} onClick={() => revisarAjuste("nuevo")} type="button">{interpBusy ? <><span className="gen-spinner small"/> Entendiendo tu ajuste (2 revisiones)…</> : <>🔍 Revisar ajuste <span>→</span></>}</button>
                 )}
                 {propuesta && (
                   <div className="ajuste-propuesta">
                     <strong>{historialAjuste.length ? `Intento ${historialAjuste.length + 1} — ` : ""}{propuesta.entendi}</strong>
                     {propuesta.cambios.length > 0 && <><span className="ap-title">Voy a cambiar:</span><ul>{propuesta.cambios.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
                     {propuesta.se_mantiene.length > 0 && <><span className="ap-title">Se queda igual:</span><ul className="ap-keep">{propuesta.se_mantiene.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
-                    {propuesta.dudas.length > 0 && <><span className="ap-title ap-warn">Tengo dudas:</span><ul className="ap-doubt">{propuesta.dudas.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
-                    {!corrigiendo ? (
+                    {propuesta.dudas.length > 0 && !corrigiendo && (
+                      <div className="ap-dudas">
+                        <span className="ap-title ap-warn">Antes de hacerla, confírmame esto:</span>
+                        {propuesta.dudas.map((d, i) => (
+                          <div className="ap-duda" key={i}>
+                            <p>{i + 1}. {d.pregunta}</p>
+                            <div className="ap-opciones">
+                              {d.opciones.map((o) => (
+                                <button className={`ap-op${respDudas[i] === o ? " on" : ""}`} disabled={interpBusy} key={o} onClick={() => setRespDudas((r) => ({ ...r, [i]: o }))} type="button">{o}</button>
+                              ))}
+                            </div>
+                            <input disabled={interpBusy} onChange={(e) => setRespDudas((r) => ({ ...r, [i]: e.target.value }))} placeholder="…u otra respuesta" type="text" value={d.opciones.includes(respDudas[i] ?? "") ? "" : (respDudas[i] ?? "")} />
+                          </div>
+                        ))}
+                        <div className="ap-actions">
+                          <button className="primary-button" disabled={interpBusy || propuesta.dudas.some((_, i) => !respDudas[i]?.trim())} onClick={() => revisarAjuste("dudas")} type="button">{interpBusy ? <><span className="gen-spinner small"/> Re-entendiendo…</> : <>✓ Confirmar respuestas</>}</button>
+                          <button className="secondary-button ap-no" disabled={interpBusy} onClick={() => setCorrigiendo(true)} type="button">✗ No, te explico</button>
+                        </div>
+                      </div>
+                    )}
+                    {propuesta.dudas.length > 0 && !corrigiendo ? null : !corrigiendo ? (
                       <div className="ap-actions">
                         <button className="primary-button" disabled={editBusy} onClick={ajustarImagen} type="button">{editBusy ? <><span className="gen-spinner small"/> Ajustando… {editSecs}s</> : <>✓ Sí, hazlo</>}</button>
                         <button className="secondary-button ap-no" disabled={editBusy} onClick={() => setCorrigiendo(true)} type="button">✗ No, te explico</button>
@@ -494,7 +520,7 @@ export default function Home() {
                         <textarea autoFocus disabled={interpBusy} value={correccion} onChange={(e) => setCorreccion(e.target.value)} placeholder="¿Qué entendí mal? Ej: no, el logo no se mueve; lo que quiero es que el producto quede más al centro…" />
                         <div className="ap-actions">
                           <MicButton onText={(t) => setCorreccion((v) => v ? v + " " + t : t)} title="Dictar la corrección" />
-                          <button className="primary-button" disabled={interpBusy || correccion.trim().length < 3} onClick={() => revisarAjuste(true)} type="button">{interpBusy ? <><span className="gen-spinner small"/> Re-entendiendo…</> : <>↻ Volver a entender</>}</button>
+                          <button className="primary-button" disabled={interpBusy || correccion.trim().length < 3} onClick={() => revisarAjuste("correccion")} type="button">{interpBusy ? <><span className="gen-spinner small"/> Re-entendiendo…</> : <>↻ Volver a entender</>}</button>
                           <button className="text-button" disabled={interpBusy} onClick={() => setCorrigiendo(false)} type="button">Cancelar</button>
                         </div>
                       </div>

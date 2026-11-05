@@ -286,13 +286,13 @@ const INTERP_SCHEMA = {
     entendi: { type: "string" },
     cambios: { type: "array", items: { type: "string" } },
     se_mantiene: { type: "array", items: { type: "string" } },
-    dudas: { type: "array", items: { type: "string" } },
+    dudas: { type: "array", items: { type: "object", properties: { pregunta: { type: "string" }, opciones: { type: "array", items: { type: "string" } } }, required: ["pregunta", "opciones"], additionalProperties: false } },
     instruccion_final: { type: "string" },
   },
   required: ["entendi", "cambios", "se_mantiene", "dudas", "instruccion_final"],
   additionalProperties: false,
 };
-type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: string[]; instruccion_final: string };
+type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: { pregunta: string; opciones: string[] }[]; instruccion_final: string };
 
 const INTERP_SYSTEM = `Eres el asistente de edición de imágenes de Printoria 3D Studio. El usuario (Marcelo) quiere AJUSTAR una imagen publicitaria ya hecha (Imagen 1). Tu trabajo NO es editar: es entender con precisión qué quiere y explicárselo de vuelta para que lo confirme.
 REGLAS:
@@ -301,7 +301,7 @@ REGLAS:
 - Si dijo algo antes y luego lo corrigió, manda la corrección más reciente.
 - 'cambios': lista concreta, uno por línea, verificable (ej. "Mover el logo de la esquina inferior derecha a la superior izquierda").
 - 'se_mantiene': lo importante que NO se toca (producto, textos, fondo, etc.).
-- 'dudas': sólo si algo es ambiguo de verdad (máx. 2). Si está claro, lista vacía.
+- 'dudas': preguntas para CONFIRMAR lo que no está 100% claro (máx. 3). Cada una con 2–4 'opciones' cortas y concretas que el usuario pueda elegir con un clic. Si hay INTENTOS ANTERIORES, revisa sobre todo la última corrección: si se puede entender de más de una forma o choca con algo que pidió antes, pregúntalo aquí. Si ya hay RESPUESTAS A DUDAS, respétalas y no vuelvas a preguntar lo mismo. Si todo está claro, lista vacía.
 - 'entendi': 1–2 frases en español mexicano informal, tipo "Va, entendí que quieres…".
 - 'instruccion_final': instrucción de edición precisa y completa para el modelo de imagen, en español, que incluya cada cambio con su ubicación y qué conservar. Si hay archivos nuevos, di exactamente qué hacer con cada uno.`;
 
@@ -309,6 +309,7 @@ const INTERP_REVISOR = `Eres un revisor exigente. Recibes la petición del usuar
 - ¿Falta algún cambio que pidió? Agrégalo.
 - ¿Hay algún cambio que NO pidió? Quítalo.
 - ¿Se refiere a algo que no existe en la imagen o lo ubica mal? Corrígelo.
+- ¿Quedó algo ambiguo (sobre todo de la última corrección) que convenga confirmar? Ponlo en 'dudas' con opciones. ¿Alguna duda ya fue respondida? Quítala y aplica la respuesta.
 - ¿La instruccion_final es lo bastante precisa para que un modelo de imagen la ejecute sin adivinar? Si no, reescríbela.
 Devuelve la interpretación corregida y final con el mismo esquema.`;
 

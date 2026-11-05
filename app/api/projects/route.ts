@@ -277,6 +277,100 @@ async function loadBrandAssets(supabase: ReturnType<typeof adminClient>) {
   return (data ?? []) as BrandAsset[];
 }
 
+// ── CONFIRMAR AJUSTE ──────────────────────────────────────────────────────────
+// Antes de gastar en una imagen, la IA explica qué entendió (2 pasadas: interpreta y luego
+// se revisa a sí misma contra la imagen y las palabras exactas). Marcelo da ✓ o ✗ + corrección.
+const INTERP_SCHEMA = {
+  type: "object",
+  properties: {
+    entendi: { type: "string" },
+    cambios: { type: "array", items: { type: "string" } },
+    se_mantiene: { type: "array", items: { type: "string" } },
+    dudas: { type: "array", items: { type: "string" } },
+    instruccion_final: { type: "string" },
+  },
+  required: ["entendi", "cambios", "se_mantiene", "dudas", "instruccion_final"],
+  additionalProperties: false,
+};
+type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: string[]; instruccion_final: string };
+
+const INTERP_SYSTEM = `Eres el asistente de edición de imágenes de Printoria 3D Studio. El usuario (Marcelo) quiere AJUSTAR una imagen publicitaria ya hecha (Imagen 1). Tu trabajo NO es editar: es entender con precisión qué quiere y explicárselo de vuelta para que lo confirme.
+REGLAS:
+- Mira de verdad la Imagen 1 y describe los cambios refiriéndote a cosas que SÍ están en ella (posición, color, texto exacto, objeto).
+- Interpreta lo que dijo de forma literal; no inventes cambios que no pidió ni "mejoras" por tu cuenta.
+- Si dijo algo antes y luego lo corrigió, manda la corrección más reciente.
+- 'cambios': lista concreta, uno por línea, verificable (ej. "Mover el logo de la esquina inferior derecha a la superior izquierda").
+- 'se_mantiene': lo importante que NO se toca (producto, textos, fondo, etc.).
+- 'dudas': sólo si algo es ambiguo de verdad (máx. 2). Si está claro, lista vacía.
+- 'entendi': 1–2 frases en español mexicano informal, tipo "Va, entendí que quieres…".
+- 'instruccion_final': instrucción de edición precisa y completa para el modelo de imagen, en español, que incluya cada cambio con su ubicación y qué conservar. Si hay archivos nuevos, di exactamente qué hacer con cada uno.`;
+
+const INTERP_REVISOR = `Eres un revisor exigente. Recibes la petición del usuario, la imagen y una PRIMERA interpretación. Compárala palabra por palabra con lo que pidió el usuario y con lo que se ve en la Imagen 1:
+- ¿Falta algún cambio que pidió? Agrégalo.
+- ¿Hay algún cambio que NO pidió? Quítalo.
+- ¿Se refiere a algo que no existe en la imagen o lo ubica mal? Corrígelo.
+- ¿La instruccion_final es lo bastante precisa para que un modelo de imagen la ejecute sin adivinar? Si no, reescríbela.
+Devuelve la interpretación corregida y final con el mismo esquema.`;
+
+async function chatJSON(system: string, userParts: Array<Record<string, unknown>>, name: string, schema: object) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
+  const response = await orFetchRetry("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
+    body: JSON.stringify({
+      model: process.env.OPENROUTER_EDIT_MODEL || process.env.OPENROUTER_DIRECTOR_MODEL || "openai/gpt-4.1",
+      messages: [{ role: "system", content: system }, { role: "user", content: userParts }],
+      response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
+      provider: { require_parameters: true },
+      temperature: 0.1,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error?.message ?? "OpenRouter no pudo interpretar el ajuste.");
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content !== "string") throw new Error("OpenRouter devolvió una respuesta vacía.");
+  return { data: JSON.parse(content), cost: Number(payload?.usage?.cost ?? 0), usage: payload.usage ?? {}, model: String(payload.model ?? "") };
+}
+
+async function interpretEdit(supabase: ReturnType<typeof adminClient>, form: FormData) {
+  const projectId = String(form.get("projectId") ?? "");
+  const baseAssetId = String(form.get("baseAssetId") ?? "");
+  const instruction = String(form.get("instruction") ?? "").trim();
+  let historial: { interpretacion: string; correccion: string }[] = [];
+  try { historial = JSON.parse(String(form.get("historial") ?? "[]")); } catch { historial = []; }
+  if (!projectId) return NextResponse.json({ error: "Falta el proyecto." }, { status: 400 });
+  if (instruction.length < 3) return NextResponse.json({ error: "Escribe qué quieres ajustar de la imagen." }, { status: 400 });
+  let baseQuery = supabase.from("creative_assets").select("id,storage_path").eq("project_id", projectId).eq("asset_role", "generated");
+  baseQuery = baseAssetId ? baseQuery.eq("id", baseAssetId) : baseQuery.order("created_at", { ascending: false }).limit(1);
+  const { data: baseRows, error: baseError } = await baseQuery;
+  if (baseError) throw baseError;
+  const base = baseRows?.[0];
+  if (!base) return NextResponse.json({ error: "No encontré la imagen base." }, { status: 404 });
+  const signed = await supabase.storage.from("creative-assets").createSignedUrl(base.storage_path, 600);
+  if (!signed.data?.signedUrl) throw new Error("No se pudo leer la imagen base.");
+  const parts: Array<Record<string, unknown>> = [
+    { type: "text", text: "Imagen 1: DISEÑO ACTUAL que se va a ajustar." },
+    { type: "image_url", image_url: { url: signed.data.signedUrl } },
+  ];
+  const extras = form.getAll("files").filter((entry): entry is File => entry instanceof File && entry.size > 0).slice(0, 2);
+  for (const [i, f] of extras.entries()) {
+    parts.push({ type: "text", text: `Imagen ${i + 2}: ARCHIVO NUEVO que subió el usuario para este ajuste (${f.name}).` });
+    parts.push({ type: "image_url", image_url: { url: `data:${f.type};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}` } });
+  }
+  const conversacion = historial.length
+    ? "\n\nINTENTOS ANTERIORES (el usuario dijo que NO era eso):\n" + historial.map((h, i) => `${i + 1}) Tú entendiste: ${h.interpretacion}\n   Él corrigió: ${h.correccion}`).join("\n")
+    : "";
+  const peticion = `PETICIÓN DEL USUARIO:\n${instruction}${conversacion}`;
+  // Pasada 1: interpretar.
+  const p1 = await chatJSON(INTERP_SYSTEM, [{ type: "text", text: `${peticion}\n\nDevuelve sólo el JSON.` }, ...parts], "printoria_edit_interp", INTERP_SCHEMA);
+  // Pasada 2: revisarse contra la petición y la imagen.
+  const p2 = await chatJSON(`${INTERP_SYSTEM}\n\n${INTERP_REVISOR}`, [{ type: "text", text: `${peticion}\n\nPRIMERA INTERPRETACIÓN:\n${JSON.stringify(p1.data, null, 2)}\n\nDevuelve sólo el JSON final.` }, ...parts], "printoria_edit_interp", INTERP_SCHEMA);
+  const costo = p1.cost + p2.cost;
+  await supabase.from("creative_generations").insert({ project_id: projectId, kind: "brief", provider: "openrouter", model: p2.model, status: "completed", prompt_text: peticion, output_data: { tipo: "interpretacion_ajuste", ...p2.data }, input_tokens: (p1.usage.prompt_tokens ?? 0) + (p2.usage.prompt_tokens ?? 0), output_tokens: (p1.usage.completion_tokens ?? 0) + (p2.usage.completion_tokens ?? 0), cost_usd: costo, completed_at: new Date().toISOString() });
+  return NextResponse.json({ ok: true, interpretacion: p2.data as Interpretacion });
+}
+
 // AJUSTE DE IMAGEN: toma una versión ya generada como base y aplica SOLO el cambio pedido.
 // No borra nada: el resultado se guarda como versión nueva (las anteriores se quedan).
 async function editImage(supabase: ReturnType<typeof adminClient>, form: FormData) {
@@ -285,6 +379,8 @@ async function editImage(supabase: ReturnType<typeof adminClient>, form: FormDat
   const instruction = String(form.get("instruction") ?? "").trim();
   const tipo = String(form.get("tipo") || "anuncio");
   const formato = String(form.get("formato") || "4:5");
+  let confirmada: Interpretacion | null = null;
+  try { const raw = form.get("interpretacion"); if (raw) confirmada = JSON.parse(String(raw)); } catch { confirmada = null; }
   if (!projectId) return NextResponse.json({ error: "Falta el proyecto." }, { status: 400 });
   if (instruction.length < 3) return NextResponse.json({ error: "Escribe qué quieres ajustar de la imagen." }, { status: 400 });
   const { data: project, error: projectError } = await supabase.from("creative_projects").select("cost_limit_usd,total_cost_usd").eq("id", projectId).single();
@@ -331,14 +427,23 @@ async function editImage(supabase: ReturnType<typeof adminClient>, form: FormDat
   }
   const prompt = `EDITA el diseño de la Imagen 1. NO crees un diseño nuevo.
 
-CAMBIO PEDIDO POR EL USUARIO:
+CAMBIO PEDIDO POR EL USUARIO (sus palabras):
 ${instruction}
+${confirmada ? `
+INSTRUCCIÓN CONFIRMADA POR EL USUARIO (ésta manda):
+${confirmada.instruccion_final}
 
+CAMBIOS EXACTOS A HACER:
+${confirmada.cambios.map((c) => "- " + c).join("\n")}
+
+NO TOCAR:
+${confirmada.se_mantiene.map((c) => "- " + c).join("\n")}
+` : ""}
 IMÁGENES ADJUNTAS (qué es cada una):
 ${etiquetas.join("\n")}
 
 REGLAS:
-- Aplica SOLO el cambio pedido. Todo lo demás se queda IGUAL que en la Imagen 1: composición, encuadre, producto, colores, fondo, logo, tipografía y textos.
+- Aplica TODOS los cambios de la lista y SOLO esos. Todo lo demás se queda IGUAL que en la Imagen 1: composición, encuadre, producto, colores, fondo, logo, tipografía y textos.
 - No cambies ni reescribas ningún texto salvo que el cambio lo pida; si lo pide, escríbelo exactamente con ortografía perfecta en español.
 - No agregues objetos, personas, manos, íconos ni elementos que el cambio no pida.
 - El producto se mantiene fiel a la foto real (forma, color, letras). Aparece una sola vez.
@@ -429,6 +534,7 @@ export async function POST(request: Request) {
     const P = await loadPrompts(supabase);
     const form = await request.formData();
     if (form.get("action") === "edit_image") return await editImage(supabase, form);
+    if (form.get("action") === "interpret_edit") return await interpretEdit(supabase, form);
     const idea = String(form.get("idea") ?? "").trim();
     const title = String(form.get("title") ?? "Nuevo creativo");
     let assetRoles: string[] = [];

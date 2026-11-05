@@ -11,6 +11,7 @@ type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
 type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
 type CreativePlan = { concept: string; rationale: string; objective: string; audience: string; format: string; visual_composition: string[]; hero_asset: string; scene: string; headline: string; subheadline: string; cta: string; references_used: string[]; ai_generated_elements: string[]; preserved_real_elements: string[]; restrictions: string[]; qa_checklist: string[] };
+type Interpretacion = { entendi: string; cambios: string[]; se_mantiene: string[]; dudas: string[]; instruccion_final: string };
 type ImageResult = { url: string; model: string; imageCostUsd: number; totalCostUsd: number; id?: string | null; note?: string | null };
 const steps = [
   { id: "input", label: "Entrada" },
@@ -51,6 +52,11 @@ export default function Home() {
   const [editBusy, setEditBusy] = useState(false);
   const [editSecs, setEditSecs] = useState(0);
   const [editError, setEditError] = useState("");
+  const [propuesta, setPropuesta] = useState<Interpretacion | null>(null);
+  const [historialAjuste, setHistorialAjuste] = useState<{ interpretacion: string; correccion: string }[]>([]);
+  const [correccion, setCorreccion] = useState("");
+  const [corrigiendo, setCorrigiendo] = useState(false);
+  const [interpBusy, setInterpBusy] = useState(false);
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
@@ -128,6 +134,38 @@ export default function Home() {
     setVersions((current) => { const next = [...current, v]; setSelectedVersion(next.length - 1); return next; });
   }
 
+  function limpiarAjuste() {
+    setEditText(""); setEditFiles([]); setPropuesta(null); setHistorialAjuste([]); setCorreccion(""); setCorrigiendo(false);
+  }
+
+  // Paso 1: la IA explica qué va a hacer (2 pasadas en el servidor). Nada se genera todavía.
+  async function revisarAjuste(conCorreccion = false) {
+    if (interpBusy || editBusy || !projectId || !imageResult) return;
+    if (editText.trim().length < 3) { setEditError("Escribe qué quieres ajustar de la imagen."); return; }
+    if (conCorreccion && correccion.trim().length < 3) { setEditError("Dime qué entendí mal."); return; }
+    const historial = conCorreccion && propuesta ? [...historialAjuste, { interpretacion: `${propuesta.entendi} | ${propuesta.cambios.join("; ")}`, correccion: correccion.trim() }] : historialAjuste;
+    setInterpBusy(true);
+    setEditError("");
+    const form = new FormData();
+    form.set("action", "interpret_edit");
+    form.set("projectId", projectId);
+    if (imageResult.id) form.set("baseAssetId", imageResult.id);
+    form.set("instruction", editText.trim());
+    form.set("historial", JSON.stringify(historial));
+    editFiles.forEach((file) => form.append("files", file));
+    try {
+      const response = await fetch("/api/projects", { method: "POST", body: form });
+      let result: { interpretacion?: Interpretacion; error?: string } = {};
+      try { result = await response.json(); } catch { result = { error: `Error del servidor (${response.status}).` }; }
+      if (!response.ok || !result.interpretacion) { setEditError(result.error ?? "No pude interpretar el ajuste. Intenta otra vez."); return; }
+      setHistorialAjuste(historial);
+      setPropuesta(result.interpretacion);
+      setCorreccion("");
+      setCorrigiendo(false);
+    } catch { setEditError("Se cortó la conexión. Intenta otra vez."); }
+    finally { setInterpBusy(false); }
+  }
+
   async function ajustarImagen() {
     if (editBusy) return; // evita doble clic mientras se hace
     if (!projectId || !imageResult) return;
@@ -139,7 +177,8 @@ export default function Home() {
     form.set("action", "edit_image");
     form.set("projectId", projectId);
     if (imageResult.id) form.set("baseAssetId", imageResult.id);
-    form.set("instruction", editText.trim());
+    form.set("instruction", [editText.trim(), ...historialAjuste.map((h) => `Corrección: ${h.correccion}`)].join("\n"));
+    if (propuesta) form.set("interpretacion", JSON.stringify(propuesta));
     form.set("tipo", tipo);
     form.set("formato", formato);
     editFiles.forEach((file) => form.append("files", file));
@@ -150,15 +189,14 @@ export default function Home() {
       let result: { imageUrl?: string; assetId?: string; model?: string; imageCostUsd?: number; totalCostUsd?: number; note?: string; error?: string } = {};
       try { result = await response.json(); } catch { result = { error: response.status === 504 ? "La imagen tardó demasiado y el servidor la cortó." : `Error del servidor (${response.status}).` }; }
       if (!response.ok || !result.imageUrl) {
-        if (await recargarVersiones(prevCount)) { setEditText(""); setEditFiles([]); return; }
+        if (await recargarVersiones(prevCount)) { limpiarAjuste(); return; }
         setEditError(result.error ?? "No se pudo ajustar la imagen. Intenta otra vez.");
         return;
       }
       addVersion({ url: result.imageUrl, id: result.assetId ?? null, model: result.model ?? IMAGE_MODEL_LABEL, imageCostUsd: result.imageCostUsd ?? 0, totalCostUsd: result.totalCostUsd ?? 0, note: result.note ?? null });
-      setEditText("");
-      setEditFiles([]);
+      limpiarAjuste();
     } catch {
-      if (await recargarVersiones(prevCount)) { setEditText(""); setEditFiles([]); return; }
+      if (await recargarVersiones(prevCount)) { limpiarAjuste(); return; }
       setEditError("Se cortó la conexión. Si en un minuto no aparece la versión nueva, intenta otra vez.");
     } finally {
       clearTimeout(timer);
@@ -424,20 +462,45 @@ export default function Home() {
               <div className="plan-correction" style={{ marginTop: 20, textAlign: "left" }}>
                 <label className="field-label" htmlFor="ajuste-imagen">✏️ Ajustar esta imagen (V{selectedVersion + 1})</label>
                 <p>Usa esta imagen como base y cambia solo lo que pidas. Sale una versión nueva y la anterior se queda guardada.</p>
-                <textarea id="ajuste-imagen" disabled={editBusy} value={editText} onChange={(e) => setEditText(e.target.value)} placeholder="Ej: haz el producto más grande, cambia el fondo a madera clara, quita el texto de abajo, agrega el llavero de la foto que te subo a la derecha…" />
+                <textarea id="ajuste-imagen" disabled={editBusy || interpBusy} value={editText} onChange={(e) => { setEditText(e.target.value); setPropuesta(null); setHistorialAjuste([]); }} placeholder="Ej: haz el producto más grande, cambia el fondo a madera clara, quita el texto de abajo, agrega el llavero de la foto que te subo a la derecha…" />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
                   <MicButton onText={(t) => setEditText((v) => v ? v + " " + t : t)} title="Dictar el ajuste" />
                   <label className="secondary-button" style={{ cursor: "pointer", marginTop: 0 }}>
                     📎 Subir archivo para agregar
-                    <input accept="image/png,image/jpeg,image/webp" hidden multiple onChange={(e) => { const nuevos = Array.from(e.target.files ?? []).filter((f) => ["image/png", "image/jpeg", "image/webp"].includes(f.type)); setEditFiles((cur) => [...cur, ...nuevos].slice(0, 2)); e.target.value = ""; }} type="file" />
+                    <input accept="image/png,image/jpeg,image/webp" hidden multiple onChange={(e) => { const nuevos = Array.from(e.target.files ?? []).filter((f) => ["image/png", "image/jpeg", "image/webp"].includes(f.type)); setEditFiles((cur) => [...cur, ...nuevos].slice(0, 2)); setPropuesta(null); e.target.value = ""; }} type="file" />
                   </label>
                   {editFiles.map((f, i) => (
-                    <span key={f.name + i} className="edit-file-chip">{f.name}<button onClick={() => setEditFiles((cur) => cur.filter((_, j) => j !== i))} type="button" aria-label="Quitar archivo">×</button></span>
+                    <span key={f.name + i} className="edit-file-chip">{f.name}<button onClick={() => { setEditFiles((cur) => cur.filter((_, j) => j !== i)); setPropuesta(null); }} type="button" aria-label="Quitar archivo">×</button></span>
                   ))}
                 </div>
-                <small style={{ color: "#8e9698", fontSize: 10.5, display: "block", marginTop: 6 }}>Máx. 2 archivos. Cada ajuste cuesta como una imagen nueva (~$0.13 USD).</small>
+                <small style={{ color: "#8e9698", fontSize: 10.5, display: "block", marginTop: 6 }}>Máx. 2 archivos. Primero te digo qué entendí; la imagen sólo se hace cuando le das ✓. Revisar cuesta centavos; cada imagen ~$0.13 USD.</small>
                 {editError && <p className="form-notice" role="alert" style={{ marginTop: 12 }}>{editError}</p>}
-                <button className="primary-button" disabled={editBusy || editText.trim().length < 3} onClick={ajustarImagen} type="button">{editBusy ? <><span className="gen-spinner small"/> Ajustando… {editSecs}s</> : <>✨ Aplicar ajuste <span>→</span></>}</button>
+                {!propuesta && (
+                  <button className="primary-button" disabled={interpBusy || editText.trim().length < 3} onClick={() => revisarAjuste(false)} type="button">{interpBusy ? <><span className="gen-spinner small"/> Entendiendo tu ajuste (2 revisiones)…</> : <>🔍 Revisar ajuste <span>→</span></>}</button>
+                )}
+                {propuesta && (
+                  <div className="ajuste-propuesta">
+                    <strong>{historialAjuste.length ? `Intento ${historialAjuste.length + 1} — ` : ""}{propuesta.entendi}</strong>
+                    {propuesta.cambios.length > 0 && <><span className="ap-title">Voy a cambiar:</span><ul>{propuesta.cambios.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
+                    {propuesta.se_mantiene.length > 0 && <><span className="ap-title">Se queda igual:</span><ul className="ap-keep">{propuesta.se_mantiene.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
+                    {propuesta.dudas.length > 0 && <><span className="ap-title ap-warn">Tengo dudas:</span><ul className="ap-doubt">{propuesta.dudas.map((c, i) => <li key={i}>{c}</li>)}</ul></>}
+                    {!corrigiendo ? (
+                      <div className="ap-actions">
+                        <button className="primary-button" disabled={editBusy} onClick={ajustarImagen} type="button">{editBusy ? <><span className="gen-spinner small"/> Ajustando… {editSecs}s</> : <>✓ Sí, hazlo</>}</button>
+                        <button className="secondary-button ap-no" disabled={editBusy} onClick={() => setCorrigiendo(true)} type="button">✗ No, te explico</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <textarea autoFocus disabled={interpBusy} value={correccion} onChange={(e) => setCorreccion(e.target.value)} placeholder="¿Qué entendí mal? Ej: no, el logo no se mueve; lo que quiero es que el producto quede más al centro…" />
+                        <div className="ap-actions">
+                          <MicButton onText={(t) => setCorreccion((v) => v ? v + " " + t : t)} title="Dictar la corrección" />
+                          <button className="primary-button" disabled={interpBusy || correccion.trim().length < 3} onClick={() => revisarAjuste(true)} type="button">{interpBusy ? <><span className="gen-spinner small"/> Re-entendiendo…</> : <>↻ Volver a entender</>}</button>
+                          <button className="text-button" disabled={interpBusy} onClick={() => setCorrigiendo(false)} type="button">Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {tipo === "sticker" && imageResult && <Cuantizador4 imageUrl={imageResult.url} />}
@@ -462,7 +525,7 @@ export default function Home() {
               {envDone && <p className="form-notice" style={{ marginTop: 12, background: "rgba(150,214,41,.1)", borderColor: "rgba(150,214,41,.25)", color: "#c5f169" }}>✓ Enviado a Publicaciones{envFecha ? " y programado" : " (queda Listo para programar)"}. Míralo en Publicaciones o Calendario.</p>}
             </div>
 
-            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setVersions([]); setSelectedVersion(0); setEditText(""); setEditFiles([]); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); setTipo("anuncio"); setFormato("4:5"); }} type="button">Crear otro proyecto</button></div></section>
+            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setVersions([]); setSelectedVersion(0); limpiarAjuste(); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); setTipo("anuncio"); setFormato("4:5"); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>

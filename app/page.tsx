@@ -326,7 +326,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">PROYECTO NUEVO</p><h1>{projectTitle}</h1></div>
-          <div className="topbar-actions"><div className="budget-card"><span>Costo estimado</span><strong>{stage === "input" ? "$0.00" : stage === "questions" ? "$0.05" : "$0.08"}</strong><small>Límite $0.80 USD</small></div><button className="logout-button" onClick={() => fetch("/api/access", { method: "DELETE" }).then(() => location.assign("/access"))} type="button">Salir</button></div>
+          <div className="topbar-actions"><div className="budget-card"><span>Costo estimado</span><strong>{stage === "input" ? "$0.00" : stage === "questions" ? "$0.05" : "$0.08"}</strong><small>Límite $3.00 USD por proyecto</small></div><button className="logout-button" onClick={() => fetch("/api/access", { method: "DELETE" }).then(() => location.assign("/access"))} type="button">Salir</button></div>
         </header>
 
         <ol className="stepper" aria-label="Progreso del creativo">

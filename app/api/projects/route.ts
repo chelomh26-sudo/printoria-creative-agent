@@ -7,6 +7,10 @@ export const maxDuration = 300;
 
 const IMAGE_MODEL = "openai/gpt-image-2";
 const IMAGE_ESTIMATED_COST_USD = 0.13;
+// Límite por proyecto (USD). Antes era $0.80 en la base (≈5 imágenes) y bloqueaba los ajustes.
+// Se usa el mayor entre este y el de la base, así no hay que tocar Supabase.
+const PROJECT_COST_LIMIT_USD = 3;
+const limiteDe = (p: { cost_limit_usd?: unknown }) => Math.max(Number(p.cost_limit_usd ?? 0) || 0, PROJECT_COST_LIMIT_USD);
 
 function modoFor(tipo: string, P: Record<string, string>): string {
   if (tipo === "historia") return P.modo_historia ?? "";
@@ -285,8 +289,8 @@ async function editImage(supabase: ReturnType<typeof adminClient>, form: FormDat
   if (instruction.length < 3) return NextResponse.json({ error: "Escribe qué quieres ajustar de la imagen." }, { status: 400 });
   const { data: project, error: projectError } = await supabase.from("creative_projects").select("cost_limit_usd,total_cost_usd").eq("id", projectId).single();
   if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
-  if (Number(project.total_cost_usd) + IMAGE_ESTIMATED_COST_USD > Number(project.cost_limit_usd)) {
-    return NextResponse.json({ error: `Ajustar excedería el límite de $${Number(project.cost_limit_usd).toFixed(2)} USD de este proyecto.` }, { status: 402 });
+  if (Number(project.total_cost_usd) + IMAGE_ESTIMATED_COST_USD > limiteDe(project)) {
+    return NextResponse.json({ error: `Ajustar excedería el límite de $${limiteDe(project).toFixed(2)} USD de este proyecto.` }, { status: 402 });
   }
   // Imagen base = la versión que el usuario tiene seleccionada (o la última).
   let baseQuery = supabase.from("creative_assets").select("id,storage_path").eq("project_id", projectId).eq("asset_role", "generated");
@@ -508,8 +512,8 @@ export async function PATCH(request: Request) {
     } else if (body.action === "approve") {
       const { data: project, error: projectError } = await supabase.from("creative_projects").select("cost_limit_usd,total_cost_usd").eq("id", body.projectId).single();
       if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
-      if (Number(project.total_cost_usd) + IMAGE_ESTIMATED_COST_USD > Number(project.cost_limit_usd)) {
-        return NextResponse.json({ error: `Generar excedería el límite de $${Number(project.cost_limit_usd).toFixed(2)} USD.` }, { status: 402 });
+      if (Number(project.total_cost_usd) + IMAGE_ESTIMATED_COST_USD > limiteDe(project)) {
+        return NextResponse.json({ error: `Generar excedería el límite de $${limiteDe(project).toFixed(2)} USD.` }, { status: 402 });
       }
       const { error } = await supabase.from("creative_projects").update({ creative_plan: body.plan, status: "generating", approved_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", body.projectId);
       if (error) throw error;

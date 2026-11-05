@@ -11,7 +11,7 @@ type Stage = "input" | "questions" | "plan" | "approved";
 type DynamicQuestion = { id: string; question: string; reason: string; type: "single_choice" | "multiple_choice" | "free_text"; required: boolean; placeholder: string | null; options: string[] };
 type ProjectAnalysis = { status: string; product_summary: string; objective_guess: string | null; audience_guess: string | null; primary_benefit: string | null; verified_facts: string[]; hypotheses: string[]; preservation_rules: string[]; questions: DynamicQuestion[] };
 type CreativePlan = { concept: string; rationale: string; objective: string; audience: string; format: string; visual_composition: string[]; hero_asset: string; scene: string; headline: string; subheadline: string; cta: string; references_used: string[]; ai_generated_elements: string[]; preserved_real_elements: string[]; restrictions: string[]; qa_checklist: string[] };
-type ImageResult = { url: string; model: string; imageCostUsd: number; totalCostUsd: number };
+type ImageResult = { url: string; model: string; imageCostUsd: number; totalCostUsd: number; id?: string | null; note?: string | null };
 const steps = [
   { id: "input", label: "Entrada" },
   { id: "questions", label: "Preguntas" },
@@ -43,7 +43,12 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [imageResult, setImageResult] = useState<ImageResult | null>(null);
+  const [versions, setVersions] = useState<ImageResult[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState(0);
+  const imageResult: ImageResult | null = versions[selectedVersion] ?? null;
+  const [editText, setEditText] = useState("");
+  const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [editBusy, setEditBusy] = useState(false);
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
@@ -77,7 +82,11 @@ export default function Home() {
       setCreativePlan(savedPlan);
       setAnalysis(result.analysis ?? null);
       if (result.sourceAssetUrl) setPreviewAssetUrl(result.sourceAssetUrl);
-      if (result.imageUrl) setImageResult({ url: result.imageUrl, model: result.imageModel ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) });
+      const loaded: ImageResult[] = Array.isArray(result.versions) && result.versions.length
+        ? result.versions.map((v: { id: string; url: string; note: string | null; model: string | null }) => ({ url: v.url, id: v.id, note: v.note, model: v.model ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) }))
+        : result.imageUrl ? [{ url: result.imageUrl, model: result.imageModel ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(project.total_cost_usd ?? 0) }] : [];
+      setVersions(loaded);
+      setSelectedVersion(Math.max(0, loaded.length - 1));
       if (result.imageUrl) setStage("approved");
       else if (savedPlan) setStage("plan");
       else if (result.analysis?.questions) setStage("questions");
@@ -92,6 +101,34 @@ export default function Home() {
     setPreviewAssetUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [files]);
+
+  function addVersion(v: ImageResult) {
+    setVersions((current) => { const next = [...current, v]; setSelectedVersion(next.length - 1); return next; });
+  }
+
+  async function ajustarImagen() {
+    if (!projectId || !imageResult) return;
+    if (editText.trim().length < 3) { setNotice("Escribe qué quieres ajustar de la imagen."); return; }
+    setEditBusy(true);
+    setNotice("");
+    const form = new FormData();
+    form.set("action", "edit_image");
+    form.set("projectId", projectId);
+    if (imageResult.id) form.set("baseAssetId", imageResult.id);
+    form.set("instruction", editText.trim());
+    form.set("tipo", tipo);
+    form.set("formato", formato);
+    editFiles.forEach((file) => form.append("files", file));
+    try {
+      const response = await fetch("/api/projects", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok || !result.imageUrl) { setNotice(result.error ?? "No se pudo ajustar la imagen."); return; }
+      addVersion({ url: result.imageUrl, id: result.assetId, model: result.model, imageCostUsd: result.imageCostUsd, totalCostUsd: result.totalCostUsd, note: result.note });
+      setEditText("");
+      setEditFiles([]);
+    } catch { setNotice("Se cortó la conexión al ajustar. Revisa en unos segundos si salió la versión nueva."); }
+    finally { setEditBusy(false); }
+  }
 
   function selectTipo(t: TipoId) {
     setTipo(t);
@@ -193,7 +230,7 @@ export default function Home() {
     setBusy(false);
     if (!response.ok || !result.imageUrl) setNotice(result.error ?? "No se pudo generar la imagen.");
     else {
-      setImageResult({ url: result.imageUrl, model: result.model, imageCostUsd: result.imageCostUsd, totalCostUsd: result.totalCostUsd });
+      addVersion({ url: result.imageUrl, id: result.assetId, model: result.model, imageCostUsd: result.imageCostUsd, totalCostUsd: result.totalCostUsd, note: versions.length ? "Regenerada desde el plan" : null });
       setNotice("");
       setStage("approved");
     }
@@ -332,6 +369,39 @@ export default function Home() {
 
           {stage === "approved" && (
             <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p>
+            {versions.length > 1 && (
+              <div className="version-strip">
+                <span className="field-label">Versiones ({versions.length}) — ninguna se borra, toca una para verla o ajustarla</span>
+                <div className="version-list">
+                  {versions.map((v, i) => (
+                    <button key={(v.id ?? v.url) + i} className={`version-thumb${i === selectedVersion ? " active" : ""}`} onClick={() => setSelectedVersion(i)} title={v.note ?? `Versión ${i + 1}`} type="button">
+                      <img alt={`Versión ${i + 1}`} src={v.url}/><small>V{i + 1}{v.note ? " · ajuste" : ""}</small>
+                    </button>
+                  ))}
+                </div>
+                {imageResult?.note && <p className="version-note">Ajuste de V{selectedVersion + 1}: “{imageResult.note}”</p>}
+              </div>
+            )}
+
+            {imageResult && (
+              <div className="plan-correction" style={{ marginTop: 20, textAlign: "left" }}>
+                <label className="field-label" htmlFor="ajuste-imagen">✏️ Ajustar esta imagen (V{selectedVersion + 1})</label>
+                <p>Usa esta imagen como base y cambia solo lo que pidas. Sale una versión nueva y la anterior se queda guardada.</p>
+                <textarea id="ajuste-imagen" value={editText} onChange={(e) => setEditText(e.target.value)} placeholder="Ej: haz el producto más grande, cambia el fondo a madera clara, quita el texto de abajo, agrega el llavero de la foto que te subo a la derecha…" />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                  <MicButton onText={(t) => setEditText((v) => v ? v + " " + t : t)} title="Dictar el ajuste" />
+                  <label className="secondary-button" style={{ cursor: "pointer", marginTop: 0 }}>
+                    📎 Subir archivo para agregar
+                    <input accept="image/png,image/jpeg,image/webp" hidden multiple onChange={(e) => { const nuevos = Array.from(e.target.files ?? []).filter((f) => ["image/png", "image/jpeg", "image/webp"].includes(f.type)); setEditFiles((cur) => [...cur, ...nuevos].slice(0, 2)); e.target.value = ""; }} type="file" />
+                  </label>
+                  {editFiles.map((f, i) => (
+                    <span key={f.name + i} className="edit-file-chip">{f.name}<button onClick={() => setEditFiles((cur) => cur.filter((_, j) => j !== i))} type="button" aria-label="Quitar archivo">×</button></span>
+                  ))}
+                </div>
+                <small style={{ color: "#8e9698", fontSize: 10.5, display: "block", marginTop: 6 }}>Máx. 2 archivos. Cada ajuste cuesta como una imagen nueva (~$0.13 USD).</small>
+                <button className="primary-button" disabled={editBusy || editText.trim().length < 3} onClick={ajustarImagen} type="button">{editBusy ? "Ajustando imagen…" : "✨ Aplicar ajuste"} <span>→</span></button>
+              </div>
+            )}
             {tipo === "sticker" && imageResult && <Cuantizador4 imageUrl={imageResult.url} />}
             {tipo === "modelo3d" && imageResult && <Generador3D imageUrl={imageResult.url} />}
 
@@ -354,7 +424,7 @@ export default function Home() {
               {envDone && <p className="form-notice" style={{ marginTop: 12, background: "rgba(150,214,41,.1)", borderColor: "rgba(150,214,41,.25)", color: "#c5f169" }}>✓ Enviado a Publicaciones{envFecha ? " y programado" : " (queda Listo para programar)"}. Míralo en Publicaciones o Calendario.</p>}
             </div>
 
-            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setImageResult(null); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); setTipo("anuncio"); setFormato("4:5"); }} type="button">Crear otro proyecto</button></div></section>
+            <div className="result-actions"><button className="secondary-button" disabled={!creativePlan} onClick={() => setStage("plan")} type="button">Editar plan</button><button className="primary-button" onClick={() => { window.history.replaceState({}, "", "/"); setStage("input"); setProjectId(null); setIdea(""); setAnalysis(null); setCreativePlan(null); setVersions([]); setSelectedVersion(0); setEditText(""); setEditFiles([]); setEnvCopy(""); setEnvFecha(""); setEnvDone(false); setTipo("anuncio"); setFormato("4:5"); }} type="button">Crear otro proyecto</button></div></section>
           )}
         </div>
       </section>

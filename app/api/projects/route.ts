@@ -262,6 +262,95 @@ async function loadBrandAssets(supabase: ReturnType<typeof adminClient>) {
   return (data ?? []) as BrandAsset[];
 }
 
+// AJUSTE DE IMAGEN: toma una versión ya generada como base y aplica SOLO el cambio pedido.
+// No borra nada: el resultado se guarda como versión nueva (las anteriores se quedan).
+async function editImage(supabase: ReturnType<typeof adminClient>, form: FormData) {
+  const projectId = String(form.get("projectId") ?? "");
+  const baseAssetId = String(form.get("baseAssetId") ?? "");
+  const instruction = String(form.get("instruction") ?? "").trim();
+  const tipo = String(form.get("tipo") || "anuncio");
+  const formato = String(form.get("formato") || "4:5");
+  if (!projectId) return NextResponse.json({ error: "Falta el proyecto." }, { status: 400 });
+  if (instruction.length < 3) return NextResponse.json({ error: "Escribe qué quieres ajustar de la imagen." }, { status: 400 });
+  const { data: project, error: projectError } = await supabase.from("creative_projects").select("cost_limit_usd,total_cost_usd").eq("id", projectId).single();
+  if (projectError || !project) throw projectError ?? new Error("No se encontró el proyecto.");
+  if (Number(project.total_cost_usd) + IMAGE_ESTIMATED_COST_USD > Number(project.cost_limit_usd)) {
+    return NextResponse.json({ error: `Ajustar excedería el límite de $${Number(project.cost_limit_usd).toFixed(2)} USD de este proyecto.` }, { status: 402 });
+  }
+  // Imagen base = la versión que el usuario tiene seleccionada (o la última).
+  let baseQuery = supabase.from("creative_assets").select("id,storage_path").eq("project_id", projectId).eq("asset_role", "generated");
+  baseQuery = baseAssetId ? baseQuery.eq("id", baseAssetId) : baseQuery.order("created_at", { ascending: false }).limit(1);
+  const { data: baseRows, error: baseError } = await baseQuery;
+  if (baseError) throw baseError;
+  const base = baseRows?.[0];
+  if (!base) return NextResponse.json({ error: "No encontré la imagen base para ajustar." }, { status: 404 });
+  const references: string[] = [];
+  const etiquetas: string[] = [];
+  const baseSigned = await supabase.storage.from("creative-assets").createSignedUrl(base.storage_path, 600);
+  if (!baseSigned.data?.signedUrl) throw new Error("No se pudo leer la imagen base.");
+  references.push(baseSigned.data.signedUrl);
+  etiquetas.push("Imagen 1: DISEÑO ACTUAL. Es la base: hay que editarla, NO hacer una nueva.");
+  // Archivos extra que el usuario subió para agregar (máx. 2). No se registran como assets del proyecto
+  // para no mezclarse con la foto del producto en futuras generaciones.
+  const extras = form.getAll("files").filter((entry): entry is File => entry instanceof File && entry.size > 0).slice(0, 2);
+  for (const entry of extras) {
+    const safeName = entry.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `private/${projectId}/ajuste-${crypto.randomUUID()}-${safeName}`;
+    const upload = await supabase.storage.from("creative-assets").upload(path, entry, { contentType: entry.type });
+    if (upload.error) throw upload.error;
+    const signed = await supabase.storage.from("creative-assets").createSignedUrl(path, 600);
+    if (!signed.data?.signedUrl) continue;
+    references.push(signed.data.signedUrl);
+    etiquetas.push(`Imagen ${references.length}: ARCHIVO NUEVO que el usuario quiere usar en el ajuste (${entry.name}). Úsalo sólo como dice la instrucción.`);
+  }
+  // Foto real del producto como respaldo de fidelidad (si cabe).
+  if (references.length < 4) {
+    const { data: product } = await supabase.from("creative_assets").select("storage_path").eq("project_id", projectId).eq("asset_role", "locked").order("created_at", { ascending: true }).limit(1).maybeSingle();
+    if (product?.storage_path) {
+      const signed = await supabase.storage.from("creative-assets").createSignedUrl(product.storage_path, 600);
+      if (signed.data?.signedUrl) {
+        references.push(signed.data.signedUrl);
+        etiquetas.push(`Imagen ${references.length}: FOTO REAL DEL PRODUCTO. Sólo para mantener el producto fiel; no lo dupliques ni lo agregues otra vez.`);
+      }
+    }
+  }
+  const prompt = `EDITA el diseño de la Imagen 1. NO crees un diseño nuevo.
+
+CAMBIO PEDIDO POR EL USUARIO:
+${instruction}
+
+IMÁGENES ADJUNTAS (qué es cada una):
+${etiquetas.join("\n")}
+
+REGLAS:
+- Aplica SOLO el cambio pedido. Todo lo demás se queda IGUAL que en la Imagen 1: composición, encuadre, producto, colores, fondo, logo, tipografía y textos.
+- No cambies ni reescribas ningún texto salvo que el cambio lo pida; si lo pide, escríbelo exactamente con ortografía perfecta en español.
+- No agregues objetos, personas, manos, íconos ni elementos que el cambio no pida.
+- El producto se mantiene fiel a la foto real (forma, color, letras). Aparece una sola vez.
+- Mismo formato y proporción que la Imagen 1.`;
+  const { data: generation, error: generationError } = await supabase.from("creative_generations").insert({ project_id: projectId, kind: "image", provider: "openrouter", model: IMAGE_MODEL, status: "running", prompt_text: prompt }).select("id").single();
+  if (generationError || !generation) throw generationError ?? new Error("No se registró el ajuste.");
+  try {
+    const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato) });
+    const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";
+    const outputPath = `generated/${projectId}/${generation.id}.${extension}`;
+    const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });
+    if (upload.error) throw upload.error;
+    const assetInsert = await supabase.from("creative_assets").insert({ project_id: projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, kind: "edit", parent_asset_id: base.id, instruction, extra_files: extras.map((f) => f.name) } }).select("id").single();
+    if (assetInsert.error) throw assetInsert.error;
+    const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, kind: "edit", parent_asset_id: base.id }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
+    if (completed.error) throw completed.error;
+    const { data: costs } = await supabase.from("creative_generations").select("cost_usd").eq("project_id", projectId).eq("status", "completed");
+    const totalCost = (costs ?? []).reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);
+    await supabase.from("creative_projects").update({ status: "qa", total_cost_usd: totalCost, updated_at: new Date().toISOString() }).eq("id", projectId);
+    const signedOutput = await supabase.storage.from("creative-assets").createSignedUrl(outputPath, 3600);
+    return NextResponse.json({ ok: true, imageUrl: signedOutput.data?.signedUrl, assetId: assetInsert.data?.id ?? null, model: IMAGE_MODEL, imageCostUsd: rendered.cost, totalCostUsd: totalCost, note: instruction });
+  } catch (failure) {
+    await supabase.from("creative_generations").update({ status: "failed", output_data: { error: failure instanceof Error ? failure.message : "Error desconocido" }, completed_at: new Date().toISOString() }).eq("id", generation.id);
+    throw failure;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = adminClient();
@@ -270,7 +359,15 @@ export async function GET(request: Request) {
       const { data: project, error } = await supabase.from("creative_projects").select("id,title,idea,status,objective,form_answers,creative_plan,total_cost_usd,cost_limit_usd,created_at,updated_at").eq("id", projectId).single();
       if (error || !project) throw error ?? new Error("No se encontró el proyecto.");
       const { data: analysisRow } = await supabase.from("creative_generations").select("output_data").eq("project_id", projectId).eq("kind", "analysis").eq("status", "completed").order("created_at", { ascending: false }).limit(1).maybeSingle();
-      const { data: generatedAsset } = await supabase.from("creative_assets").select("storage_path,metadata").eq("project_id", projectId).eq("asset_role", "generated").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: generatedRows } = await supabase.from("creative_assets").select("id,storage_path,metadata,created_at").eq("project_id", projectId).eq("asset_role", "generated").order("created_at", { ascending: true });
+      const generatedAsset = generatedRows?.length ? generatedRows[generatedRows.length - 1] : null;
+      const versions: { id: string; url: string; createdAt: string; note: string | null; model: string | null }[] = [];
+      if (generatedRows?.length) {
+        const { data: signedList } = await supabase.storage.from("creative-assets").createSignedUrls(generatedRows.map((g) => g.storage_path), 3600);
+        const byPath: Record<string, string> = {};
+        for (const s of signedList ?? []) if (s.path && s.signedUrl) byPath[s.path] = s.signedUrl;
+        for (const g of generatedRows) if (byPath[g.storage_path]) versions.push({ id: g.id, url: byPath[g.storage_path], createdAt: g.created_at, note: g.metadata?.instruction ?? null, model: g.metadata?.model ?? null });
+      }
       const { data: sourceAsset } = await supabase.from("creative_assets").select("storage_path").eq("project_id", projectId).in("asset_role", ["locked", "reference"]).order("created_at", { ascending: true }).limit(1).maybeSingle();
       let imageUrl: string | null = null;
       let sourceAssetUrl: string | null = null;
@@ -282,7 +379,7 @@ export async function GET(request: Request) {
         const signed = await supabase.storage.from("creative-assets").createSignedUrl(sourceAsset.storage_path, 3600);
         sourceAssetUrl = signed.data?.signedUrl ?? null;
       }
-      return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, sourceAssetUrl, imageModel: generatedAsset?.metadata?.model ?? null });
+      return NextResponse.json({ project, analysis: analysisRow?.output_data ?? null, imageUrl, sourceAssetUrl, imageModel: generatedAsset?.metadata?.model ?? null, versions });
     }
     const { data: projectRows, error } = await supabase.from("creative_projects").select("id,title,idea,status,total_cost_usd,created_at,updated_at").order("created_at", { ascending: false });
     if (error) throw error;
@@ -316,6 +413,7 @@ export async function POST(request: Request) {
     const supabase = adminClient();
     const P = await loadPrompts(supabase);
     const form = await request.formData();
+    if (form.get("action") === "edit_image") return await editImage(supabase, form);
     const idea = String(form.get("idea") ?? "").trim();
     const title = String(form.get("title") ?? "Nuevo creativo");
     let assetRoles: string[] = [];
@@ -454,7 +552,7 @@ export async function PATCH(request: Request) {
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });
         if (upload.error) throw upload.error;
-        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "3:4", target_aspect_ratio: "4:5", quality: "high" } });
+        const assetInsert = await supabase.from("creative_assets").insert({ project_id: body.projectId, asset_role: "generated", original_name: `${generation.id}.${extension}`, storage_path: outputPath, mime_type: rendered.mediaType, metadata: { model: IMAGE_MODEL, generation_id: generation.id, aspect_ratio: "3:4", target_aspect_ratio: "4:5", quality: "high" } }).select("id").single();
         if (assetInsert.error) throw assetInsert.error;
         const completed = await supabase.from("creative_generations").update({ status: "completed", output_data: { storage_path: outputPath, aspect_ratio: "3:4", target_aspect_ratio: "4:5", quality: "high" }, input_tokens: rendered.usage.prompt_tokens ?? 0, output_tokens: rendered.usage.completion_tokens ?? 0, cost_usd: rendered.cost, completed_at: new Date().toISOString() }).eq("id", generation.id);
         if (completed.error) throw completed.error;
@@ -462,7 +560,7 @@ export async function PATCH(request: Request) {
         const totalCost = (costs ?? []).reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);
         await supabase.from("creative_projects").update({ status: "qa", total_cost_usd: totalCost, updated_at: new Date().toISOString() }).eq("id", body.projectId);
         const signedOutput = await supabase.storage.from("creative-assets").createSignedUrl(outputPath, 3600);
-        return NextResponse.json({ ok: true, imageUrl: signedOutput.data?.signedUrl, model: IMAGE_MODEL, imageCostUsd: rendered.cost, totalCostUsd: totalCost });
+        return NextResponse.json({ ok: true, imageUrl: signedOutput.data?.signedUrl, assetId: assetInsert.data?.id ?? null, model: IMAGE_MODEL, imageCostUsd: rendered.cost, totalCostUsd: totalCost });
       } catch (generationFailure) {
         await supabase.from("creative_generations").update({ status: "failed", output_data: { error: generationFailure instanceof Error ? generationFailure.message : "Error desconocido" }, completed_at: new Date().toISOString() }).eq("id", generation.id);
         await supabase.from("creative_projects").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", body.projectId);

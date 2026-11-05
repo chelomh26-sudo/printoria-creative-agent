@@ -9,4 +9,4 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/((?!access|api/access|_next/static|_next/image|favicon.svg).*)"] };
+export const config = { matcher: ["/((?!access|api/access|api/prompts-public|_next/static|_next/image|favicon.svg).*)"] };

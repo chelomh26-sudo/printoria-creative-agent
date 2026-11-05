@@ -39,7 +39,7 @@ function esProduccion(tipo: string): boolean { return tipo === "sticker" || tipo
 function analistaFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_analista ?? P.img_analista) : P.img_analista; }
 function directorFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_director ?? P.img_director) : P.img_director; }
 function revisorFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? (P.prod_revisor ?? P.img_revisor) : P.img_revisor; }
-function marketingFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? "" : P.img_marketing; }
+function marketingFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? "" : `${P.img_marketing}\n\nVOZ DE MARCA PRINTORIA (el copy debe sonar así):\n${P.voz_printoria ?? ""}${P.ejemplos_copy?.trim() ? `\n\nEJEMPLOS DE MARCELO (referencia principal de tono):\n${P.ejemplos_copy.trim()}` : ""}`; }
 function designFor(tipo: string, P: Record<string, string>): string { return esProduccion(tipo) ? "" : P.img_design; }
 
 
@@ -169,7 +169,7 @@ async function analyzeWithOpenRouter(idea: string, files: File[], roles: string[
     imageParts.push({ type: "image_url", image_url: { url: `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}` } });
   }
   for (const visual of brandVisuals) {
-    imageParts.push({ type: "text", text: `REFERENCIA VISUAL APROBADA DE LA BIBLIOTECA: ${visual.name}. Analiza su jerarquía, escena, escala, iluminación y relación texto-producto.` });
+    imageParts.push({ type: "text", text: `REFERENCIA VISUAL APROBADA DE LA BIBLIOTECA (de OTRO proyecto, NO es este producto): ${visual.name}. Úsala sólo para entender jerarquía, iluminación y nivel de calidad; no propongas copiar sus objetos ni su texto.` });
     imageParts.push({ type: "image_url", image_url: { url: visual.url } });
   }
   const system = `${analista}
@@ -195,9 +195,14 @@ ${design}${modo ? "\n\n" + modo : ""}`;
   return { analysis: JSON.parse(content), usage: payload.usage ?? {}, generationId: payload.id ?? null, model: payload.model ?? "openai/gpt-4.1-mini" };
 }
 
-function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string) {
+function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string, imagenes = "") {
   const list = (value: unknown) => Array.isArray(value) ? value.join("; ") : String(value ?? "");
+  const elementos = list(plan.ai_generated_elements).trim() || "fondo e iluminación sencillos (nada más)";
+  // Si la plantilla (editable en Ajustes) no trae {{imagenes}}, se agrega al final para que el modelo sepa qué es cada imagen.
+  if (imagenes && !tpl.includes("{{imagenes}}")) tpl += "\n\nIMÁGENES ADJUNTAS (qué es cada una):\n{{imagenes}}\nNo agregues objetos que no estén pedidos.";
   return tpl
+    .replaceAll("{{imagenes}}", imagenes || "Foto real del producto.")
+    .replaceAll("{{elementos}}", elementos)
     .replaceAll("{{concept}}", String(plan.concept ?? ""))
     .replaceAll("{{scene}}", String(plan.scene ?? ""))
     .replaceAll("{{composicion}}", list(plan.visual_composition))
@@ -403,29 +408,48 @@ export async function PATCH(request: Request) {
       if (brief.error) throw brief.error;
       const tipo = String(body.tipo || "anuncio");
       const formato = String(body.formato || "4:5");
-      const prompt = imagePrompt(body.plan ?? {}, P.img_design, genTemplateFor(tipo, P));
+      const prompt = imagePrompt(body.plan ?? {}, designFor(tipo, P), genTemplateFor(tipo, P));
       const { data: generation, error: generationError } = await supabase.from("creative_generations").insert({ project_id: body.projectId, kind: "image", provider: "openrouter", model: IMAGE_MODEL, status: "running", prompt_text: prompt }).select("id").single();
       if (generationError || !generation) throw generationError ?? new Error("No se registró la generación.");
       try {
         const { data: assets, error: assetsError } = await supabase.from("creative_assets").select("storage_path").eq("project_id", body.projectId).in("asset_role", ["locked", "reference"]).limit(2);
         if (assetsError) throw assetsError;
         const references: string[] = [];
+        const etiquetas: string[] = [];
         for (const asset of assets ?? []) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
-          if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
+          if (signed.data?.signedUrl) {
+            references.push(signed.data.signedUrl);
+            etiquetas.push(esProduccion(tipo)
+              ? `Imagen ${references.length}: FOTO REAL DEL SUJETO a convertir (base de la pieza).`
+              : `Imagen ${references.length}: FOTO REAL DEL PRODUCTO que se vende. Es el protagonista; reprodúcelo fiel (forma, color, letras). Aparece UNA sola vez.`);
+          }
         }
         if (!esProduccion(tipo)) {
         const libraryAssets = await loadBrandAssets(supabase);
         const requestedNames = Array.isArray(body.plan?.references_used) ? body.plan.references_used.map((item: unknown) => String(item).toLowerCase()) : [];
         const officialLogo = libraryAssets.find((asset) => asset.category === "logo" && asset.name.toLowerCase().includes("sin fondo")) ?? libraryAssets.find((asset) => asset.category === "logo");
-        const requestedAssets = libraryAssets.filter((asset) => asset.category !== "logo" && requestedNames.some((name: string) => name.includes(asset.name.toLowerCase()) || asset.name.toLowerCase().includes(name)));
+        // Al modelo de imagen sólo van: logo + assets que el plan pidió por nombre.
+        // Mascotas sólo en Letrero o si el plan las pidió (antes se colaban y metían cosas de más).
+        const pideMascota = tipo === "letrero" || requestedNames.some((n: string) => /mascota|vic|mascot/.test(n));
+        const requestedAssets = libraryAssets.filter((asset) => asset.category !== "logo"
+          && (asset.category !== "mascot" || pideMascota)
+          && requestedNames.some((name: string) => name.includes(asset.name.toLowerCase()) || asset.name.toLowerCase().includes(name)));
         const selectedLibraryAssets = [officialLogo, ...requestedAssets].filter((asset): asset is BrandAsset => Boolean(asset)).slice(0, Math.max(0, 4 - references.length));
         for (const asset of selectedLibraryAssets) {
           const signed = await supabase.storage.from("creative-assets").createSignedUrl(asset.storage_path, 600);
-          if (signed.data?.signedUrl) references.push(signed.data.signedUrl);
+          if (!signed.data?.signedUrl) continue;
+          references.push(signed.data.signedUrl);
+          const n = references.length;
+          if (asset.category === "logo") etiquetas.push(`Imagen ${n}: LOGO OFICIAL de Printoria. Úsalo SOLO como logo pequeño en una esquina, copiado tal cual. No es un producto ni parte de la escena.`);
+          else if (asset.category === "mascot") etiquetas.push(`Imagen ${n}: MASCOTA de la marca (${asset.name}). Inclúyela una sola vez, fiel a su estilo, sin quitarle protagonismo al producto.`);
+          else if (asset.category === "product" || asset.category === "order") etiquetas.push(`Imagen ${n}: otro PRODUCTO REAL (${asset.name}) que el plan pidió mostrar. Reprodúcelo fiel.`);
+          else etiquetas.push(`Imagen ${n}: REFERENCIA DE ESTILO (${asset.name}). Copia SOLO composición, luz y estilo. NO copies sus objetos, productos, personas ni textos.`);
         }
         }
-        const rendered = await generateImageWithOpenRouter(prompt, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" || tipo === "sticker" || tipo === "modelo3d" });
+        const promptFinal = etiquetas.length ? imagePrompt(body.plan ?? {}, designFor(tipo, P), genTemplateFor(tipo, P), etiquetas.join("\n")) : prompt;
+        if (promptFinal !== prompt) await supabase.from("creative_generations").update({ prompt_text: promptFinal }).eq("id", generation.id);
+        const rendered = await generateImageWithOpenRouter(promptFinal, references, { aspect_ratio: aspectFor(tipo, formato), transparent: tipo === "mascota" || tipo === "elemento" || tipo === "sticker" || tipo === "modelo3d" });
         const extension = rendered.mediaType === "image/jpeg" ? "jpg" : rendered.mediaType === "image/webp" ? "webp" : "png";
         const outputPath = `generated/${body.projectId}/${generation.id}.${extension}`;
         const upload = await supabase.storage.from("creative-assets").upload(outputPath, rendered.bytes, { contentType: rendered.mediaType, upsert: false });

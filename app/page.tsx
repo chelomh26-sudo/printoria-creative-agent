@@ -49,6 +49,8 @@ export default function Home() {
   const [editText, setEditText] = useState("");
   const [editFiles, setEditFiles] = useState<File[]>([]);
   const [editBusy, setEditBusy] = useState(false);
+  const [editSecs, setEditSecs] = useState(0);
+  const [editError, setEditError] = useState("");
   const [correctionRequest, setCorrectionRequest] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null);
@@ -96,6 +98,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!editBusy) return;
+    setEditSecs(0);
+    const t = setInterval(() => setEditSecs((v) => v + 1), 1000);
+    return () => clearInterval(t);
+  }, [editBusy]);
+
+  // Recarga versiones del servidor (por si la imagen sí se hizo aunque la conexión se cortó).
+  async function recargarVersiones(prevCount: number): Promise<boolean> {
+    if (!projectId) return false;
+    try {
+      const r = await fetch(`/api/projects?id=${encodeURIComponent(projectId)}`).then((x) => x.json());
+      if (!Array.isArray(r.versions) || r.versions.length <= prevCount) return false;
+      const loaded: ImageResult[] = r.versions.map((v: { id: string; url: string; note: string | null; model: string | null }) => ({ url: v.url, id: v.id, note: v.note, model: v.model ?? IMAGE_MODEL_LABEL, imageCostUsd: 0, totalCostUsd: Number(r.project?.total_cost_usd ?? 0) }));
+      setVersions(loaded);
+      setSelectedVersion(loaded.length - 1);
+      return true;
+    } catch { return false; }
+  }
+
+  useEffect(() => {
     if (!files[0]) return;
     const objectUrl = URL.createObjectURL(files[0]);
     setPreviewAssetUrl(objectUrl);
@@ -107,10 +129,12 @@ export default function Home() {
   }
 
   async function ajustarImagen() {
+    if (editBusy) return; // evita doble clic mientras se hace
     if (!projectId || !imageResult) return;
-    if (editText.trim().length < 3) { setNotice("Escribe qué quieres ajustar de la imagen."); return; }
+    if (editText.trim().length < 3) { setEditError("Escribe qué quieres ajustar de la imagen."); return; }
     setEditBusy(true);
-    setNotice("");
+    setEditError("");
+    const prevCount = versions.length;
     const form = new FormData();
     form.set("action", "edit_image");
     form.set("projectId", projectId);
@@ -119,15 +143,27 @@ export default function Home() {
     form.set("tipo", tipo);
     form.set("formato", formato);
     editFiles.forEach((file) => form.append("files", file));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 310000);
     try {
-      const response = await fetch("/api/projects", { method: "POST", body: form });
-      const result = await response.json();
-      if (!response.ok || !result.imageUrl) { setNotice(result.error ?? "No se pudo ajustar la imagen."); return; }
-      addVersion({ url: result.imageUrl, id: result.assetId, model: result.model, imageCostUsd: result.imageCostUsd, totalCostUsd: result.totalCostUsd, note: result.note });
+      const response = await fetch("/api/projects", { method: "POST", body: form, signal: controller.signal });
+      let result: { imageUrl?: string; assetId?: string; model?: string; imageCostUsd?: number; totalCostUsd?: number; note?: string; error?: string } = {};
+      try { result = await response.json(); } catch { result = { error: response.status === 504 ? "La imagen tardó demasiado y el servidor la cortó." : `Error del servidor (${response.status}).` }; }
+      if (!response.ok || !result.imageUrl) {
+        if (await recargarVersiones(prevCount)) { setEditText(""); setEditFiles([]); return; }
+        setEditError(result.error ?? "No se pudo ajustar la imagen. Intenta otra vez.");
+        return;
+      }
+      addVersion({ url: result.imageUrl, id: result.assetId ?? null, model: result.model ?? IMAGE_MODEL_LABEL, imageCostUsd: result.imageCostUsd ?? 0, totalCostUsd: result.totalCostUsd ?? 0, note: result.note ?? null });
       setEditText("");
       setEditFiles([]);
-    } catch { setNotice("Se cortó la conexión al ajustar. Revisa en unos segundos si salió la versión nueva."); }
-    finally { setEditBusy(false); }
+    } catch {
+      if (await recargarVersiones(prevCount)) { setEditText(""); setEditFiles([]); return; }
+      setEditError("Se cortó la conexión. Si en un minuto no aparece la versión nueva, intenta otra vez.");
+    } finally {
+      clearTimeout(timer);
+      setEditBusy(false);
+    }
   }
 
   function selectTipo(t: TipoId) {
@@ -368,13 +404,14 @@ export default function Home() {
           )}
 
           {stage === "approved" && (
-            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p>
+            <section className="panel approved-panel"><div className="success-mark">✓</div><span className="section-kicker">BORRADOR GENERADO</span><h2>Tu imagen está lista</h2><p>GPT Image 2 creó esta pieza 4:5 y el archivo quedó guardado de forma privada en Supabase.</p>{imageResult && <div className="generated-result"><div className="generated-frame"><img alt="Borrador publicitario generado para Printoria" src={imageResult.url}/>{editBusy && <div className="generating-overlay"><span className="gen-spinner"/><strong>Haciendo V{versions.length + 1}…</strong><small>{editSecs}s · suele tardar 1–2 min</small></div>}</div><div><strong>{imageResult.model}</strong><span>{imageResult.imageCostUsd > 0 ? `Imagen: $${imageResult.imageCostUsd.toFixed(4)} USD · ` : ""}Total registrado: ${imageResult.totalCostUsd.toFixed(4)} USD</span><a href={imageResult.url} rel="noreferrer" target="_blank">Abrir imagen completa ↗</a></div></div>}<p className="generated-warning">Revisa producto, textos y logotipos. Este render todavía no garantiza preservación exacta de píxeles del LOCKED ASSET.</p>
+            {notice && !editBusy && <p className="form-notice" role="alert">{notice}</p>}
             {versions.length > 1 && (
               <div className="version-strip">
                 <span className="field-label">Versiones ({versions.length}) — ninguna se borra, toca una para verla o ajustarla</span>
                 <div className="version-list">
                   {versions.map((v, i) => (
-                    <button key={(v.id ?? v.url) + i} className={`version-thumb${i === selectedVersion ? " active" : ""}`} onClick={() => setSelectedVersion(i)} title={v.note ?? `Versión ${i + 1}`} type="button">
+                    <button key={(v.id ?? v.url) + i} className={`version-thumb${i === selectedVersion ? " active" : ""}`} disabled={editBusy} onClick={() => setSelectedVersion(i)} title={v.note ?? `Versión ${i + 1}`} type="button">
                       <img alt={`Versión ${i + 1}`} src={v.url}/><small>V{i + 1}{v.note ? " · ajuste" : ""}</small>
                     </button>
                   ))}
@@ -387,7 +424,7 @@ export default function Home() {
               <div className="plan-correction" style={{ marginTop: 20, textAlign: "left" }}>
                 <label className="field-label" htmlFor="ajuste-imagen">✏️ Ajustar esta imagen (V{selectedVersion + 1})</label>
                 <p>Usa esta imagen como base y cambia solo lo que pidas. Sale una versión nueva y la anterior se queda guardada.</p>
-                <textarea id="ajuste-imagen" value={editText} onChange={(e) => setEditText(e.target.value)} placeholder="Ej: haz el producto más grande, cambia el fondo a madera clara, quita el texto de abajo, agrega el llavero de la foto que te subo a la derecha…" />
+                <textarea id="ajuste-imagen" disabled={editBusy} value={editText} onChange={(e) => setEditText(e.target.value)} placeholder="Ej: haz el producto más grande, cambia el fondo a madera clara, quita el texto de abajo, agrega el llavero de la foto que te subo a la derecha…" />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
                   <MicButton onText={(t) => setEditText((v) => v ? v + " " + t : t)} title="Dictar el ajuste" />
                   <label className="secondary-button" style={{ cursor: "pointer", marginTop: 0 }}>
@@ -399,7 +436,8 @@ export default function Home() {
                   ))}
                 </div>
                 <small style={{ color: "#8e9698", fontSize: 10.5, display: "block", marginTop: 6 }}>Máx. 2 archivos. Cada ajuste cuesta como una imagen nueva (~$0.13 USD).</small>
-                <button className="primary-button" disabled={editBusy || editText.trim().length < 3} onClick={ajustarImagen} type="button">{editBusy ? "Ajustando imagen…" : "✨ Aplicar ajuste"} <span>→</span></button>
+                {editError && <p className="form-notice" role="alert" style={{ marginTop: 12 }}>{editError}</p>}
+                <button className="primary-button" disabled={editBusy || editText.trim().length < 3} onClick={ajustarImagen} type="button">{editBusy ? <><span className="gen-spinner small"/> Ajustando… {editSecs}s</> : <>✨ Aplicar ajuste <span>→</span></>}</button>
               </div>
             )}
             {tipo === "sticker" && imageResult && <Cuantizador4 imageUrl={imageResult.url} />}

@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { loadPrompts } from "../../../lib/prompts";
 
-export const maxDuration = 120;
+// gpt-image-2 en calidad alta con 3-4 referencias puede tardar >2 min; con 120 s Vercel mataba el ajuste.
+export const maxDuration = 300;
 
 const IMAGE_MODEL = "openai/gpt-image-2";
 const IMAGE_ESTIMATED_COST_USD = 0.13;
@@ -49,6 +50,16 @@ async function orFetchRetry(url: string, options: RequestInit): Promise<Response
   for (let i = 0; i < 2 && !response.ok; i++) {
     await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     response = await fetch(url, options);
+  }
+  return response;
+}
+
+// Para imágenes: un solo reintento y sólo si es saturación/caída del proveedor (no en errores 4xx).
+async function imageFetchRetry(url: string, options: RequestInit): Promise<Response> {
+  const response = await fetch(url, options);
+  if (response.status === 429 || response.status >= 500) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return fetch(url, options);
   }
   return response;
 }
@@ -218,7 +229,7 @@ function imagePrompt(plan: Record<string, unknown>, design: string, tpl: string,
 async function generateImageWithOpenRouter(prompt: string, references: string[], opts: { aspect_ratio?: string; transparent?: boolean } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY en Vercel.");
-  const response = await orFetchRetry("https://openrouter.ai/api/v1/images", {
+  const response = await imageFetchRetry("https://openrouter.ai/api/v1/images", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "http-referer": "https://printoria-creative-agent.vercel.app", "x-title": "Printoria Creative Agent" },
     body: JSON.stringify({
